@@ -1,0 +1,66 @@
+[package]
+name = "docker-manager"
+version = "3.0.0"
+edition = "2021"
+authors = ["uniCommerce Team"]
+description = "Docker Container Manager - Fast, efficient, and visually perfect"
+license = "MIT"
+
+[dependencies]
+# TUI Framework
+ratatui = { version = "0.29", features = ["crossterm"] }
+crossterm = "0.28"
+
+# Docker API
+bollard = "0.17"  # Docker API client for Rust
+
+# Async runtime
+tokio = { version = "1.42", features = ["full"] }
+futures-util = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# CLI args
+clap = { version = "4.5", features = ["derive"] }
+
+# Clipboard support
+arboard = "3.4"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Time and date
+chrono = "0.4"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Better string formatting
+textwrap = "0.16"
+
+# Color support
+termcolor = "1.4"
+
+# Configuration file support
+toml = "0.8"
+
+# File operations
+dirs = "5.0"
+
+# Memory efficient circular buffer for logs
+circular-buffer = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[[bin]]
+name = "docker-manager"
+path = "src/main.rs"
