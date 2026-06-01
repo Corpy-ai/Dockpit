@@ -17,15 +17,7 @@ salir de la terminal. Está hecho en Rust sobre
 arquitectura Elm (`Message → Update → View` unidireccional) para una UI que nunca
 parpadea ni tiene fugas de memoria.
 
-```
-┌─ Contenedores ───────┐┌─ Logs: api ───────────────[ERROR]─┐
-│ ● api      running   ││ 12:04:01 INFO  server listening   │
-│ ● db       running   ││ 12:04:02 WARN  slow query 812ms   │
-│ ◌ worker   paused    ││ 12:04:03 ERROR connection reset   ▒│
-│ ○ cache    stopped   ││ 12:04:03 INFO  retrying (1/5)     ▒│
-└──────────────────────┘└───────────────────────────────────┘
-  ↑↓ seleccionar · L logs · S stats · / buscar · Tab filtro · D ops
-```
+![Dockpit — gestión de contenedores en vivo desde la terminal](docs/assets/overview.gif)
 
 ## Características
 
@@ -39,6 +31,45 @@ parpadea ni tiene fugas de memoria.
 - **Exec e inspección** — ejecutá comandos dentro de un contenedor desde la CLI.
 - **Portapapeles compatible con SSH** — usa herramientas nativas en local y **OSC 52** sobre SSH, así copiar funciona incluso en un host remoto sin X11.
 - **Modo CLI** — subcomandos scripteables (`list`, `start`, `stop`, `restart`, `logs`, `stats`, `exec`) además de la TUI interactiva.
+
+## Recorrido de features
+
+### Logs en vivo con niveles de color
+
+Mirá los logs de un contenedor en tiempo real — `ERROR`/`WARN`/`INFO`/`DEBUG`
+salen con color, y al scrollear más allá del tope se carga el historial más
+viejo de forma transparente (infinite scroll).
+
+![Logs en vivo con niveles de color](docs/assets/logs-levels.gif)
+
+### Búsqueda dentro de los logs
+
+Apretá `/`, tipeá una consulta y saltá entre las coincidencias resaltadas con
+`n`/`N`.
+
+![Búsqueda en logs](docs/assets/search.gif)
+
+### Filtro por nivel de log
+
+Ciclá el nivel visible con `Tab` — el título, la scrollbar y el conteo de líneas
+siguen el filtro.
+
+![Filtro por nivel de log](docs/assets/filter.gif)
+
+### Estadísticas en tiempo real
+
+Cambiá a la vista de estadísticas con `S` para ver CPU, memoria, red y block I/O
+en vivo.
+
+![Estadísticas del contenedor en tiempo real](docs/assets/stats.gif)
+
+### Operaciones de contenedor y portapapeles
+
+`D` abre el menú de ciclo de vida (iniciar / detener / reiniciar / pausar /
+reanudar / eliminar); `C` abre el menú del portapapeles (presets de copia,
+exportar a archivo, o imprimir para SSH).
+
+![Menús de operaciones Docker y portapapeles](docs/assets/menus.gif)
 
 ## Instalación
 

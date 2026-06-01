@@ -16,15 +16,7 @@ Rust on top of [ratatui](https://github.com/ratatui/ratatui),
 architecture (unidirectional `Message → Update → View`) for a UI that never
 flickers and never leaks.
 
-```
-┌─ Containers ─────────┐┌─ Logs: api ───────────────[ERROR]─┐
-│ ● api      running   ││ 12:04:01 INFO  server listening   │
-│ ● db       running   ││ 12:04:02 WARN  slow query 812ms   │
-│ ◌ worker   paused    ││ 12:04:03 ERROR connection reset   ▒│
-│ ○ cache    stopped   ││ 12:04:03 INFO  retrying (1/5)     ▒│
-└──────────────────────┘└───────────────────────────────────┘
-  ↑↓ select · L logs · S stats · / search · Tab filter · D ops
-```
+![Dockpit — live container management in the terminal](docs/assets/overview.gif)
 
 ## Features
 
@@ -38,6 +30,42 @@ flickers and never leaks.
 - **Exec & inspect** — run commands inside a container from the CLI.
 - **SSH-friendly clipboard** — uses native tools locally and **OSC 52** over SSH, so copying works even on a remote host with no X11.
 - **CLI mode** — scriptable subcommands (`list`, `start`, `stop`, `restart`, `logs`, `stats`, `exec`) alongside the interactive TUI.
+
+## Feature tour
+
+### Live logs with color-coded levels
+
+Stream a container's logs in real time — `ERROR`/`WARN`/`INFO`/`DEBUG` are
+color-coded, and scrolling past the top transparently loads older history
+(infinite scroll).
+
+![Live logs with color-coded levels](docs/assets/logs-levels.gif)
+
+### Search inside logs
+
+Press `/`, type a query, and jump between highlighted matches with `n`/`N`.
+
+![In-log search](docs/assets/search.gif)
+
+### Filter by log level
+
+Cycle the visible level with `Tab` — the title, scrollbar and line count all
+follow the filter.
+
+![Filter by log level](docs/assets/filter.gif)
+
+### Real-time stats
+
+Switch to the stats view with `S` for live CPU, memory, network and block I/O.
+
+![Real-time container stats](docs/assets/stats.gif)
+
+### Container operations & clipboard
+
+`D` opens the lifecycle menu (start / stop / restart / pause / unpause / remove);
+`C` opens the clipboard menu (copy presets, export to file, or print for SSH).
+
+![Docker operations and clipboard menus](docs/assets/menus.gif)
 
 ## Installation
 
