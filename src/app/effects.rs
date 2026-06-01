@@ -34,7 +34,8 @@ impl EffectRunner {
                 let docker = self.docker.clone();
                 let tx = self.tx.clone();
                 tokio::spawn(async move {
-                    match docker.list_containers().await {
+                    // The TUI always shows every container (running + stopped).
+                    match docker.list_containers(true).await {
                         Ok(containers) => {
                             let _ = tx.send(Message::ContainersLoaded(containers)).await;
                         }
@@ -106,62 +107,25 @@ impl EffectRunner {
                         logs_tx,
                     ).await {
                         Ok(handle) => {
-                            // Collect logs from the channel with proper blocking receive
+                            // Drain the channel until the producer closes it (it finishes
+                            // after the `tail`-limited batch). A single global timeout guards
+                            // against a hung Docker API — far simpler than per-recv polling.
                             let mut logs = Vec::with_capacity(batch_size);
-
-                            // Use timeout to avoid blocking forever if Docker API is slow
-                            let timeout = tokio::time::Duration::from_secs(10);
-                            let start = std::time::Instant::now();
-
-                            // Receive logs with blocking recv (not try_recv)
-                            // This ensures we don't miss logs due to race conditions
-                            loop {
-                                // Check timeout
-                                if start.elapsed() > timeout {
-                                    break;
-                                }
-
-                                // Check if we have enough logs
-                                if logs.len() >= batch_size {
-                                    break;
-                                }
-
-                                // Try to receive with short timeout to allow checking conditions
-                                match tokio::time::timeout(
-                                    tokio::time::Duration::from_millis(100),
-                                    logs_rx.recv()
-                                ).await {
-                                    Ok(Some(log_str)) => {
+                            let _ = tokio::time::timeout(
+                                tokio::time::Duration::from_secs(10),
+                                async {
+                                    while let Some(log_str) = logs_rx.recv().await {
                                         logs.push(LogEntry::from_raw(&log_str));
                                     }
-                                    Ok(None) => {
-                                        // Channel closed - sender finished
-                                        break;
-                                    }
-                                    Err(_) => {
-                                        // Timeout - check if handle is still running
-                                        if handle.is_finished() {
-                                            // Task finished, drain remaining logs
-                                            while let Ok(log_str) = logs_rx.try_recv() {
-                                                logs.push(LogEntry::from_raw(&log_str));
-                                                if logs.len() >= batch_size {
-                                                    break;
-                                                }
-                                            }
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
+                                },
+                            ).await;
 
-                            // Determine if there are more logs available
-                            // Use > not >= because we want to indicate "there might be more"
+                            // A full batch means there may be older logs still available.
                             let has_more = logs.len() >= batch_size;
 
-                            // Gracefully stop the handle (it may have already finished)
+                            // Gracefully stop the producer (likely already finished).
                             handle.abort();
 
-                            // Send the collected logs
                             let _ = tx.send(Message::HistoricalLogsLoaded { logs, has_more }).await;
                         }
                         Err(e) => {
@@ -211,27 +175,27 @@ impl EffectRunner {
                     let result = match op {
                         DockerOp::Start(id) => {
                             docker.start_container(&id).await
-                                .map(|_| format!("Container started"))
+                                .map(|_| "Container started".to_string())
                         }
                         DockerOp::Stop(id) => {
                             docker.stop_container(&id).await
-                                .map(|_| format!("Container stopped"))
+                                .map(|_| "Container stopped".to_string())
                         }
                         DockerOp::Restart(id) => {
                             docker.restart_container(&id).await
-                                .map(|_| format!("Container restarted"))
+                                .map(|_| "Container restarted".to_string())
                         }
                         DockerOp::Pause(id) => {
                             docker.pause_container(&id).await
-                                .map(|_| format!("Container paused"))
+                                .map(|_| "Container paused".to_string())
                         }
                         DockerOp::Unpause(id) => {
                             docker.unpause_container(&id).await
-                                .map(|_| format!("Container unpaused"))
+                                .map(|_| "Container unpaused".to_string())
                         }
                         DockerOp::Remove { id, force } => {
                             docker.remove_container(&id, force).await
-                                .map(|_| format!("Container removed"))
+                                .map(|_| "Container removed".to_string())
                         }
                     };
 
@@ -250,16 +214,43 @@ impl EffectRunner {
                 let tx = self.tx.clone();
                 let lines = content.lines().count();
 
-                // Clipboard operations must be done synchronously due to arboard limitations
-                let mut clipboard = ClipboardManager::new();
-                match clipboard.copy_to_clipboard(&content) {
+                // Run off the event loop: clipboard tools (and arboard) are
+                // blocking, and a misbehaving tool must never freeze the UI.
+                // The whole ClipboardManager lives inside the blocking task.
+                tokio::task::spawn_blocking(move || {
+                    let mut clipboard = ClipboardManager::new();
+                    match clipboard.copy_to_clipboard(&content) {
+                        Ok(_) => {
+                            let _ = tx.try_send(Message::ClipboardSuccess(
+                                format!("Copied {} lines to clipboard", lines)
+                            ));
+                        }
+                        Err(e) => {
+                            let _ = tx.try_send(Message::ClipboardError(e.to_string()));
+                        }
+                    }
+                });
+            }
+
+            // Handled directly in the UI event loop (needs terminal control to
+            // suspend the TUI). Never dispatched here; no-op for exhaustiveness.
+            Effect::PrintForManualCopy(_) => {}
+
+            Effect::ExportLogs { content, container_name } => {
+                let tx = self.tx.clone();
+                let lines = content.lines().count();
+                let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+                let filename = format!("docker-manager-{}-{}.txt", container_name, timestamp);
+                match std::fs::write(&filename, content) {
                     Ok(_) => {
-                        let _ = tx.try_send(Message::ClipboardSuccess(
-                            format!("Copied {} lines to clipboard", lines)
+                        let _ = tx.try_send(Message::OperationSuccess(
+                            format!("Exported {} lines to {}", lines, filename)
                         ));
                     }
                     Err(e) => {
-                        let _ = tx.try_send(Message::ClipboardError(e.to_string()));
+                        let _ = tx.try_send(Message::OperationError(
+                            format!("Export failed: {}", e)
+                        ));
                     }
                 }
             }
@@ -270,10 +261,6 @@ impl EffectRunner {
                     tokio::time::sleep(duration).await;
                     let _ = tx.send(Message::Tick).await;
                 });
-            }
-
-            Effect::ForceRedraw => {
-                // This effect is handled by the render loop, not here
             }
 
             Effect::Quit => {

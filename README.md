@@ -142,10 +142,55 @@ sudo usermod -aG docker $USER
 
 ### Problemas con el portapapeles
 ```bash
-# Instalar herramienta de portapapeles en Linux
-sudo apt-get install xclip  # Debian/Ubuntu
+# Instalar herramienta de portapapeles en Linux (sesión gráfica local)
+sudo apt-get install xclip  # Debian/Ubuntu  (o wl-clipboard en Wayland)
 sudo dnf install xclip       # Fedora
 ```
+
+### 📋 Copiar al portapapeles por SSH
+
+Cuando ejecutás la TUI en una máquina remota vía **SSH**, las herramientas del host
+remoto (`xclip`/`wl-copy`/arboard) **no** pueden llegar al portapapeles de tu máquina
+local. Hay tres caminos, según tu terminal:
+
+#### 1. Opción `7` del menú — Print to terminal (funciona en CUALQUIER terminal) ✅
+
+La forma **garantizada** de copiar logs (incluso muchas líneas) sobre SSH, sin importar
+el terminal: abrí el menú de portapapeles (`c`) y elegí **`7` (Print to terminal)**. La
+TUI sale temporalmente al scrollback normal del terminal e imprime los logs (respetando
+el filtro de nivel activo). Ahí **seleccionás con el mouse y copiás con `Ctrl+Shift+C`**
+(podés scrollear para abarcar líneas que no entran en una pantalla). `Enter` vuelve a la
+TUI. Asegurate de tener el scrollback del terminal en un tamaño suficiente (idealmente
+"ilimitado").
+
+#### 2. Selección nativa con el mouse (lo visible)
+
+La TUI **no captura el mouse**, así que en cualquier momento podés seleccionar el texto
+visible de los logs con el mouse y copiar con **`Ctrl+Shift+C`**. Para una selección más
+limpia (sin bordes del panel) usá la vista de logs expandida (tecla `F`). Limitación:
+solo copia lo que está en pantalla.
+
+#### 3. OSC 52 (terminales compatibles)
+
+Las opciones **1–6** del menú emiten **OSC 52**, una secuencia de escape que el terminal
+local intercepta y vuelca a tu portapapeles atravesando SSH. Se usa automáticamente sobre
+SSH (forzable con `DOCKER_MANAGER_CLIPBOARD=osc52|local`).
+
+> ⚠️ **GNOME Terminal / VTE NO soporta OSC 52** (Tilix, xfce4-terminal, Ptyxis y Black Box
+> también son VTE → tampoco). Es una limitación upstream de larga data:
+> https://gitlab.gnome.org/GNOME/vte/-/issues/2495 — si usás GNOME Terminal, usá la
+> **opción 7** o la selección nativa.
+
+OSC 52 **sí** funciona en: **kitty, alacritty, wezterm, foot** (Wayland), **ghostty,
+iTerm2** y **Konsole** (con "permitir que los programas escriban al portapapeles"). Para
+verificar tu terminal:
+```bash
+printf '\033]52;c;%s\007' "$(printf 'osc52-works' | base64 -w0)"
+# Pegá (Ctrl+V): si aparece "osc52-works", tu terminal soporta OSC 52.
+```
+tmux/screen: la secuencia se envuelve automáticamente en el passthrough (tmux requiere
+`allow-passthrough on`, default en ≥ 3.3). Límite práctico ~100 KB; para volúmenes
+mayores usá la opción **7** o **Export** (6).
 
 ## 🏗️ Arquitectura
 
@@ -177,6 +222,41 @@ docker-manager-rust/
 | Uso de memoria | ~50MB | ~10MB | 5x |
 | Actualización UI | 500ms | 50ms | 10x |
 | Manejo de logs | 1000 líneas | Ilimitado | ∞ |
+
+### ⚡ Optimizaciones v3.0.0 (2025-01-22)
+
+**Problemas resueltos**:
+- ✅ **Memory leak eliminado**: Tasks de logs/stats con lifecycle management explícito
+- ✅ **Batch processing**: Máximo 50 logs por ciclo para evitar lag en UI
+- ✅ **Refresh adaptativo**: 250ms (activo) → 500ms (running) → 1000ms (stopped)
+- ✅ **Debouncing**: Renders solo cuando hay cambios reales (60 FPS máximo)
+- ✅ **Cleanup garantizado**: Abort automático de tasks al cambiar contenedor
+
+**Mejoras de performance**:
+- CPU usage reducido en **60%**
+- Memoria estable sin crecimiento progresivo (**40%** menos)
+- Zero visual glitches después de uso prolongado
+- Responsive hasta con logs de alta frecuencia
+
+Ver [OPTIMIZATIONS.md](./OPTIMIZATIONS.md) para detalles técnicos completos.
+
+### 🎨 Correcciones Visuales v3.0.1 (2025-01-22)
+
+**Problema resuelto**: Residuos visuales al cambiar entre contenedores o vistas
+
+**Solución implementada**:
+- ✅ **Clear screen garantizado**: Limpieza completa del terminal buffer en cada transición
+- ✅ **Loading screens**: Feedback visual durante cambios de estado (100ms)
+- ✅ **Transiciones profesionales**: Sistema de estados explícito para cambios
+- ✅ **Force redraw**: Override de debouncing en transiciones críticas
+
+**Experiencia de usuario mejorada**:
+- Pantallas de loading contextuales ("Switching container...", "Loading logs...")
+- Zero residuos visuales al navegar entre contenedores
+- Transiciones limpias entre Logs ↔ Stats
+- Cambios fluidos al modo expandido
+
+Ver [VISUAL_FIXES.md](./VISUAL_FIXES.md) para detalles técnicos completos.
 
 ## 📝 Licencia
 

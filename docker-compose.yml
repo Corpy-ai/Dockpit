@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  docker-manager:
+    build: .
+    image: unicommerce/docker-manager:3.0.0
+    container_name: docker-manager
+    tty: true
+    stdin_open: true
+    volumes:
+      # Mount Docker socket for container management
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Optional: Mount Docker binary if needed
+      - /usr/bin/docker:/usr/bin/docker:ro
+    environment:
+      - TERM=xterm-256color
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    networks:
+      - docker-manager-net
+    restart: unless-stopped
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+          cpus: '0.5'
+        reservations:
+          memory: 20M
+          cpus: '0.1'
+
+networks:
+  docker-manager-net:
+    driver: bridge
+
+# Alternative service for development
+  docker-manager-dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: unicommerce/docker-manager:dev
+    container_name: docker-manager-dev
+    tty: true
+    stdin_open: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /usr/bin/docker:/usr/bin/docker:ro
+      # Mount source for development
+      - ./src:/app/src:ro
+      - ./Cargo.toml:/app/Cargo.toml:ro
+    environment:
+      - TERM=xterm-256color
+      - RUST_LOG=debug
+    networks:
+      - docker-manager-net

@@ -17,75 +17,23 @@ pub enum Message {
         generation: u64,
         content: String,
     },
-    LogsBatchReceived(Vec<String>),
     HistoricalLogsLoaded {
         logs: Vec<LogEntry>,
         has_more: bool,
     },
     StatsReceived(Stats),
 
-    // === Navigation Events ===
-    SelectContainer(usize),
-    SelectPreviousContainer,
-    SelectNextContainer,
-    JumpToContainer(usize),
-
-    // === Scroll Events ===
-    ScrollUp(usize),
-    ScrollDown(usize),
-    ScrollToTop,
-    ScrollToBottom,
-    ScrollPageUp,
-    ScrollPageDown,
-    LoadMoreLogs,  // Triggered when reaching top of logs
-
-    // === View Mode Events ===
-    SwitchToLogsView,
-    SwitchToStatsView,
-    ToggleExpandedLogs,
-    SwitchToContainersNav,
-    SwitchToLogsNav,
-
-    // === Menu Events ===
-    OpenDockerOpsMenu,
-    OpenClipboardMenu,
-    CloseMenu,
-
-    // === Docker Operations ===
-    StartContainer(String),
-    StopContainer(String),
-    RestartContainer(String),
-    PauseContainer(String),
-    UnpauseContainer(String),
-    RemoveContainer { id: String, force: bool },
-
     // === Operation Results ===
     OperationSuccess(String),
     OperationError(String),
 
     // === Clipboard Operations ===
-    CopyLogsLast(usize),      // Copy last N lines
-    CopyLogsVisible,          // Copy visible lines
-    CopyLogsAll,              // Copy all logs
-    CopyLogsFromPosition,     // Copy from current scroll position
     ClipboardSuccess(String),
     ClipboardError(String),
 
-    // === Numeric Input ===
-    StartNumericInput,
-    NumericInputChar(char),
-    NumericInputSubmit,
-    NumericInputCancel,
-    NumericInputBackspace,
-
     // === System Events ===
     Quit,
-    Resize(u16, u16),
-
-    // === Stream Management ===
-    StartLogsStream(String),   // container_id
-    StartStatsStream(String),  // container_id
-    StopAllStreams,
+    Resize(u16),
 }
 
 /// A parsed log entry with timestamp for efficient pagination
@@ -99,7 +47,7 @@ pub struct LogEntry {
 impl LogEntry {
     pub fn from_raw(raw: &str) -> Self {
         let (timestamp, content) = parse_timestamp(raw);
-        let level = detect_log_level(&content);
+        let level = detect_log_level(content);
 
         Self {
             timestamp,
@@ -134,18 +82,34 @@ fn parse_timestamp(raw: &str) -> (Option<chrono::DateTime<chrono::Utc>>, &str) {
     (None, raw)
 }
 
+/// ASCII case-insensitive substring search.
+///
+/// Avoids allocating an uppercased copy of `haystack` (which `detect_log_level`
+/// used to do on *every* log line via `to_uppercase()`). `needle` must already
+/// be uppercase ASCII. Also reused by the in-log search feature.
+pub fn contains_ci(haystack: &str, needle: &str) -> bool {
+    let (h, n) = (haystack.as_bytes(), needle.as_bytes());
+    if n.is_empty() {
+        return true;
+    }
+    if h.len() < n.len() {
+        return false;
+    }
+    h.windows(n.len())
+        .any(|w| w.iter().zip(n).all(|(a, b)| a.to_ascii_uppercase() == *b))
+}
+
 /// Detect log level from content
 fn detect_log_level(content: &str) -> LogLevel {
-    let upper = content.to_uppercase();
-    if upper.contains("ERROR") || upper.contains("ERR]") || upper.contains("[E]") {
+    if contains_ci(content, "ERROR") || contains_ci(content, "ERR]") || contains_ci(content, "[E]") {
         LogLevel::Error
-    } else if upper.contains("WARN") || upper.contains("WRN]") || upper.contains("[W]") {
+    } else if contains_ci(content, "WARN") || contains_ci(content, "WRN]") || contains_ci(content, "[W]") {
         LogLevel::Warn
-    } else if upper.contains("INFO") || upper.contains("INF]") || upper.contains("[I]") {
+    } else if contains_ci(content, "INFO") || contains_ci(content, "INF]") || contains_ci(content, "[I]") {
         LogLevel::Info
-    } else if upper.contains("DEBUG") || upper.contains("DBG]") || upper.contains("[D]") {
+    } else if contains_ci(content, "DEBUG") || contains_ci(content, "DBG]") || contains_ci(content, "[D]") {
         LogLevel::Debug
-    } else if upper.contains("TRACE") || upper.contains("TRC]") || upper.contains("[T]") {
+    } else if contains_ci(content, "TRACE") || contains_ci(content, "TRC]") || contains_ci(content, "[T]") {
         LogLevel::Trace
     } else {
         LogLevel::Unknown
@@ -176,11 +140,16 @@ pub enum Effect {
     /// Copy to clipboard
     CopyToClipboard(String),
 
+    /// Dump log content to the terminal's normal scrollback so the user can
+    /// select it with the mouse (Ctrl+Shift+C). The only way to copy many
+    /// lines over SSH on terminals without OSC 52 support (e.g. GNOME Terminal).
+    PrintForManualCopy(String),
+
+    /// Export log content to a timestamped file on disk
+    ExportLogs { content: String, container_name: String },
+
     /// Schedule a tick (for periodic refresh)
     ScheduleTick(std::time::Duration),
-
-    /// Force a full redraw (use sparingly!)
-    ForceRedraw,
 
     /// Quit the application
     Quit,
@@ -195,4 +164,35 @@ pub enum DockerOp {
     Pause(String),
     Unpause(String),
     Remove { id: String, force: bool },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contains_ci_is_ascii_case_insensitive() {
+        assert!(contains_ci("Hello ERROR world", "ERROR"));
+        assert!(contains_ci("hello error world", "ERROR"));
+        assert!(contains_ci("WaRnInG: x", "WARN"));
+        assert!(!contains_ci("all good here", "ERROR"));
+        assert!(contains_ci("anything", "")); // empty needle matches
+        assert!(!contains_ci("ab", "ABC")); // needle longer than haystack
+    }
+
+    #[test]
+    fn contains_ci_handles_multibyte_haystack() {
+        // Non-ASCII bytes must never be mistaken for an ASCII match.
+        assert!(contains_ci("café ERROR", "ERROR"));
+        assert!(!contains_ci("ñoño", "NO"));
+    }
+
+    #[test]
+    fn detect_log_level_classifies_by_keyword() {
+        assert_eq!(detect_log_level("ERROR boom"), LogLevel::Error);
+        assert_eq!(detect_log_level("a warning happened"), LogLevel::Warn);
+        assert_eq!(detect_log_level("INFO started"), LogLevel::Info);
+        assert_eq!(detect_log_level("debug trace here"), LogLevel::Debug);
+        assert_eq!(detect_log_level("plain message"), LogLevel::Unknown);
+    }
 }

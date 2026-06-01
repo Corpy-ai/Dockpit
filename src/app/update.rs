@@ -1,6 +1,18 @@
 use crossterm::event::KeyCode;
-use crate::app::message::{Message, Effect, DockerOp, LogEntry};
+use crate::app::message::{contains_ci, Message, Effect, DockerOp, LogEntry, LogLevel};
 use crate::app::state::{AppState, ViewMode, NavigationMode, MenuMode, Notification, TransitionState};
+
+/// Cycle through level filters: All → Error → Warn → Info → Debug → Trace → All.
+fn cycle_filter(current: Option<LogLevel>) -> Option<LogLevel> {
+    match current {
+        None => Some(LogLevel::Error),
+        Some(LogLevel::Error) => Some(LogLevel::Warn),
+        Some(LogLevel::Warn) => Some(LogLevel::Info),
+        Some(LogLevel::Info) => Some(LogLevel::Debug),
+        Some(LogLevel::Debug) => Some(LogLevel::Trace),
+        Some(LogLevel::Trace) | Some(LogLevel::Unknown) => None,
+    }
+}
 
 /// Number of historical logs to load per batch when scrolling up
 /// Using 50 for smooth incremental loading experience
@@ -19,7 +31,47 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
     match message {
         // === Input Events ===
         Message::KeyPressed(key) => {
-            // Handle numeric input mode first
+            // Any keypress counts as activity (drives adaptive tick cadence).
+            state.last_activity = std::time::Instant::now();
+
+            // Handle search input mode first - captures every key, including digits
+            if state.search.active {
+                match key.code {
+                    KeyCode::Char(c) => state.search.push(c),
+                    KeyCode::Backspace => state.search.pop(),
+                    KeyCode::Esc => state.search.cancel(),
+                    KeyCode::Enter => {
+                        let needle = state.search.query.to_ascii_uppercase();
+                        if needle.is_empty() {
+                            state.search.cancel();
+                        } else {
+                            let matches: Vec<usize> = state.logs
+                                .filtered_entries()
+                                .enumerate()
+                                .filter(|(_, e)| contains_ci(&e.content, &needle))
+                                .map(|(i, _)| i)
+                                .collect();
+                            if let Some(&first) = matches.first() {
+                                state.search.matches = matches;
+                                state.search.current = 0;
+                                state.search.active = false;
+                                state.logs.scroll_position = first;
+                            } else {
+                                let q = state.search.query.clone();
+                                state.search.cancel();
+                                state.notification = Some(Notification::error(
+                                    format!("No matches for '{}'", q)
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                state.needs_redraw = true;
+                return (state, effects);
+            }
+
+            // Handle numeric input mode
             if state.numeric_input.active {
                 match key.code {
                     KeyCode::Char(c) if c.is_ascii_digit() => {
@@ -92,8 +144,34 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                     state.numeric_input.start();
                     state.numeric_input.push(c);
                 }
-                KeyCode::Char('n') | KeyCode::Char('N') => {
-                    state.numeric_input.start();
+
+                // In-log search
+                KeyCode::Char('/') => {
+                    state.search.start();
+                    state.needs_redraw = true;
+                }
+                KeyCode::Char('n') => {
+                    if let Some(pos) = state.search.next() {
+                        state.logs.scroll_position = pos;
+                        state.needs_redraw = true;
+                    }
+                }
+                KeyCode::Char('N') => {
+                    if let Some(pos) = state.search.prev() {
+                        state.logs.scroll_position = pos;
+                        state.needs_redraw = true;
+                    }
+                }
+
+                // Cycle log-level filter
+                KeyCode::Tab => {
+                    state.logs.level_filter = cycle_filter(state.logs.level_filter);
+                    // Filter changed → rebuild the O(1) filtered-count cache.
+                    state.logs.recount_filtered();
+                    state.logs.scroll_position = state.logs.scroll_position
+                        .min(state.logs.max_scroll(state.logs_panel_height));
+                    state.force_full_redraw = true;
+                    state.needs_redraw = true;
                 }
 
                 // Navigation
@@ -106,7 +184,7 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                 KeyCode::Left | KeyCode::Char('h') | KeyCode::Char('H') => {
                     state.navigation_mode = NavigationMode::Containers;
                 }
-                KeyCode::Right | KeyCode::Char('l') => {
+                KeyCode::Right => {
                     if state.view_mode == ViewMode::Logs || state.view_mode == ViewMode::LogsExpanded {
                         state.navigation_mode = NavigationMode::Logs;
                     } else {
@@ -114,43 +192,55 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                     }
                 }
 
-                // View mode switches
-                KeyCode::Char('L') => {
-                    // v3.3.0: Start transition with loading screen
-                    state.transition_state = TransitionState::Loading("Loading logs...".to_string());
-                    state.force_full_redraw = true;
-                    state.needs_redraw = true;
-                    state.view_mode = ViewMode::Logs;
-                    state.navigation_mode = NavigationMode::Logs;
-                    // v3.2.2: Increment generation for view mode switch
-                    state.stream_generation = state.stream_generation.wrapping_add(1);
-                    state.logs.clear();
-                    state.stats = None;
-                    effects.push(Effect::StopAllStreams);
-                    // Clone container id first to avoid borrow conflict
-                    let container_id = state.selected_container().map(|c| c.id.clone());
-                    if let Some(id) = container_id {
-                        state.current_container_id = Some(id.clone());
-                        effects.push(Effect::StartLogsStream {
-                            container_id: id,
-                            initial_lines: 100,
-                            generation: state.stream_generation,
-                        });
+                // View mode switches (l/L and s/S are symmetric; already-in-view just refocuses)
+                KeyCode::Char('l') | KeyCode::Char('L') => {
+                    if matches!(state.view_mode, ViewMode::Logs | ViewMode::LogsExpanded) {
+                        // Already viewing logs: just focus the logs panel (old `l` behavior).
+                        state.navigation_mode = NavigationMode::Logs;
+                        state.needs_redraw = true;
+                    } else {
+                        // v3.3.0: Start transition with loading screen
+                        state.transition_state = TransitionState::Loading("Loading logs...".to_string());
+                        state.force_full_redraw = true;
+                        state.needs_redraw = true;
+                        state.view_mode = ViewMode::Logs;
+                        state.navigation_mode = NavigationMode::Logs;
+                        // v3.2.2: Increment generation for view mode switch
+                        state.stream_generation = state.stream_generation.wrapping_add(1);
+                        state.logs.clear();
+                        state.stats = None;
+                        effects.push(Effect::StopAllStreams);
+                        // Clone container id first to avoid borrow conflict
+                        let container_id = state.selected_container().map(|c| c.id.clone());
+                        if let Some(id) = container_id {
+                            state.current_container_id = Some(id.clone());
+                            effects.push(Effect::StartLogsStream {
+                                container_id: id,
+                                initial_lines: 100,
+                                generation: state.stream_generation,
+                            });
+                        }
                     }
                 }
                 KeyCode::Char('s') | KeyCode::Char('S') => {
-                    // v3.3.0: Start transition with loading screen
-                    state.transition_state = TransitionState::Loading("Loading stats...".to_string());
-                    state.force_full_redraw = true;
-                    state.needs_redraw = true;
-                    state.view_mode = ViewMode::Stats;
-                    state.navigation_mode = NavigationMode::Stats;
-                    state.logs.clear();
-                    effects.push(Effect::StopAllStreams);
-                    if let Some(container) = state.selected_container() {
-                        effects.push(Effect::StartStatsStream {
-                            container_id: container.id.clone(),
-                        });
+                    if state.view_mode == ViewMode::Stats {
+                        // Already viewing stats: just focus the stats panel.
+                        state.navigation_mode = NavigationMode::Stats;
+                        state.needs_redraw = true;
+                    } else {
+                        // v3.3.0: Start transition with loading screen
+                        state.transition_state = TransitionState::Loading("Loading stats...".to_string());
+                        state.force_full_redraw = true;
+                        state.needs_redraw = true;
+                        state.view_mode = ViewMode::Stats;
+                        state.navigation_mode = NavigationMode::Stats;
+                        state.logs.clear();
+                        effects.push(Effect::StopAllStreams);
+                        if let Some(container) = state.selected_container() {
+                            effects.push(Effect::StartStatsStream {
+                                container_id: container.id.clone(),
+                            });
+                        }
                     }
                 }
                 KeyCode::Char('f') | KeyCode::Char('F') => {
@@ -181,16 +271,16 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                     }
                 }
 
-                // Scroll controls
+                // Scroll controls (use logs_panel_height for accurate scroll calculations)
                 KeyCode::PageUp => {
-                    let amount = state.viewport_height.saturating_sub(2).max(1);
+                    let amount = state.logs_panel_height.saturating_sub(2).max(1);
                     (state, effects) = handle_scroll_up(state, amount);
                     state.needs_redraw = true;
                 }
                 KeyCode::PageDown => {
-                    let amount = state.viewport_height.saturating_sub(2).max(1);
+                    let amount = state.logs_panel_height.saturating_sub(2).max(1);
                     state.logs.scroll_position = (state.logs.scroll_position + amount)
-                        .min(state.logs.max_scroll(state.viewport_height));
+                        .min(state.logs.max_scroll(state.logs_panel_height));
                     state.needs_redraw = true;
                 }
                 KeyCode::Home => {
@@ -209,7 +299,7 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                     }
                 }
                 KeyCode::End => {
-                    state.logs.scroll_to_bottom(state.viewport_height);
+                    state.logs.scroll_to_bottom(state.logs_panel_height);
                     state.needs_redraw = true;
                 }
 
@@ -226,12 +316,17 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
         Message::Tick => {
             // Clear expired notifications
             state.clear_expired_notification();
-            // Refresh containers list every 2 seconds (less aggressive = less visual noise)
-            if state.last_refresh.elapsed().as_secs() >= 2 {
+            // Adaptive cadence: once the user has been idle for a few seconds, slow
+            // the tick and the container refresh to cut CPU usage and wakeups.
+            // The render loop still polls keyboard events instantly, so input latency
+            // is unaffected.
+            let idle = state.last_activity.elapsed().as_secs() >= 5;
+            let refresh_interval = if idle { 5 } else { 2 };
+            if state.last_refresh.elapsed().as_secs() >= refresh_interval {
                 effects.push(Effect::LoadContainers);
             }
-            // Schedule next tick
-            effects.push(Effect::ScheduleTick(std::time::Duration::from_millis(250)));
+            let tick_ms = if idle { 1000 } else { 250 };
+            effects.push(Effect::ScheduleTick(std::time::Duration::from_millis(tick_ms)));
         }
 
         // === Data Events ===
@@ -260,11 +355,11 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
             }
 
             let entry = LogEntry::from_raw(&content);
-            let was_at_bottom = state.logs.is_at_bottom(state.viewport_height);
+            let was_at_bottom = state.logs.is_at_bottom(state.logs_panel_height);
             state.logs.push(entry);
 
             if was_at_bottom {
-                state.logs.scroll_to_bottom(state.viewport_height);
+                state.logs.scroll_to_bottom(state.logs_panel_height);
             }
 
             // v3.3.0: Complete transition if we were loading
@@ -273,17 +368,6 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                 state.force_full_redraw = true;
             }
             state.needs_redraw = true;
-        }
-
-        Message::LogsBatchReceived(logs) => {
-            let was_at_bottom = state.logs.is_at_bottom(state.viewport_height);
-            for raw in logs {
-                let entry = LogEntry::from_raw(&raw);
-                state.logs.push(entry);
-            }
-            if was_at_bottom {
-                state.logs.scroll_to_bottom(state.viewport_height);
-            }
         }
 
         Message::HistoricalLogsLoaded { logs, has_more } => {
@@ -305,75 +389,6 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
                 state.force_full_redraw = true;
             }
             state.needs_redraw = true;
-        }
-
-        // === Navigation Events ===
-        Message::SelectContainer(index) => {
-            if index < state.containers.len() {
-                // v3.3.0: Start transition with loading screen
-                state.transition_state = TransitionState::Loading("Switching container...".to_string());
-                state.force_full_redraw = true;
-                state.needs_redraw = true;
-                // v3.2.2: Increment generation FIRST to invalidate pending messages
-                state.stream_generation = state.stream_generation.wrapping_add(1);
-                state.selected_container = index;
-                // v3.2.2: Clear logs IMMEDIATELY
-                state.logs.clear();
-                state.stats = None;
-                effects.push(Effect::StopAllStreams);
-                if let Some(container) = state.containers.get(index) {
-                    state.current_container_id = Some(container.id.clone());
-                    match state.view_mode {
-                        ViewMode::Logs | ViewMode::LogsExpanded => {
-                            effects.push(Effect::StartLogsStream {
-                                container_id: container.id.clone(),
-                                initial_lines: 100,
-                                generation: state.stream_generation,
-                            });
-                        }
-                        ViewMode::Stats => {
-                            effects.push(Effect::StartStatsStream {
-                                container_id: container.id.clone(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        Message::ScrollUp(amount) => {
-            (state, effects) = handle_scroll_up(state, amount);
-            state.needs_redraw = true;
-        }
-
-        Message::ScrollDown(amount) => {
-            state.logs.scroll_position = (state.logs.scroll_position + amount)
-                .min(state.logs.max_scroll(state.viewport_height));
-            state.needs_redraw = true;
-        }
-
-        Message::ScrollToTop => {
-            state.logs.scroll_position = 0;
-            state.needs_redraw = true;
-        }
-
-        Message::ScrollToBottom => {
-            state.logs.scroll_to_bottom(state.viewport_height);
-            state.needs_redraw = true;
-        }
-
-        Message::LoadMoreLogs => {
-            if !state.logs.is_loading_more && state.logs.has_more_history {
-                state.logs.is_loading_more = true;
-                state.needs_redraw = true;  // Show loading indicator
-                if let Some(container) = state.selected_container() {
-                    effects.push(Effect::LoadHistoricalLogs {
-                        container_id: container.id.clone(),
-                        before_timestamp: state.logs.oldest_timestamp,
-                        batch_size: HISTORICAL_BATCH_SIZE,
-                    });
-                }
-            }
         }
 
         // === Operation Results ===
@@ -400,22 +415,18 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
             state.needs_redraw = true;
         }
 
-        // === Menu Events ===
-        Message::CloseMenu => {
-            state.menu_mode = MenuMode::None;
-            state.needs_redraw = true;
-        }
-
         // === System Events ===
         Message::Quit => {
             state.should_quit = true;
             effects.push(Effect::Quit);
         }
 
-        Message::Resize(_, height) => {
+        Message::Resize(height) => {
             state.viewport_height = height.saturating_sub(6) as usize; // Account for header/footer
-            // Adjust scroll position if it exceeds new max scroll
-            let max_scroll = state.logs.max_scroll(state.viewport_height);
+            // logs_panel_height = content height - panel borders (2 for top/bottom border)
+            state.logs_panel_height = height.saturating_sub(8) as usize;
+            // Adjust scroll position if it exceeds new max scroll (use logs_panel_height for accuracy)
+            let max_scroll = state.logs.max_scroll(state.logs_panel_height);
             if state.logs.scroll_position > max_scroll {
                 state.logs.scroll_position = max_scroll;
             }
@@ -423,9 +434,6 @@ pub fn update(mut state: AppState, message: Message) -> (AppState, Vec<Effect>) 
             state.force_full_redraw = true;
             state.needs_redraw = true;
         }
-
-        // Handle remaining messages
-        _ => {}
     }
 
     (state, effects)
@@ -516,7 +524,7 @@ fn handle_navigate_down(mut state: AppState) -> (AppState, Vec<Effect>) {
         }
         NavigationMode::Logs | NavigationMode::Stats => {
             state.logs.scroll_position = (state.logs.scroll_position + 1)
-                .min(state.logs.max_scroll(state.viewport_height));
+                .min(state.logs.max_scroll(state.logs_panel_height));
             state.needs_redraw = true;
         }
     }
@@ -626,7 +634,7 @@ fn handle_clipboard_menu(mut state: AppState, key: KeyCode) -> (AppState, Vec<Ef
         KeyCode::Char('3') => {
             // Visible lines
             let content: String = state.logs
-                .visible_entries(state.viewport_height)
+                .visible_entries(state.logs_panel_height)
                 .map(|e| e.content.as_str())
                 .collect::<Vec<_>>()
                 .join("\n");
@@ -634,9 +642,12 @@ fn handle_clipboard_menu(mut state: AppState, key: KeyCode) -> (AppState, Vec<Ef
             state.menu_mode = MenuMode::None;
         }
         KeyCode::Char('4') => {
-            // From current position
-            let content: String = state.logs.entries
-                .iter()
+            // From current position to the end. `scroll_position` lives in
+            // filtered-index space (same as navigation / `visible_entries`),
+            // so we must skip over the *filtered* view, not the raw buffer —
+            // otherwise an active level filter copies the wrong lines.
+            let content: String = state.logs
+                .filtered_entries()
                 .skip(state.logs.scroll_position)
                 .map(|e| e.content.as_str())
                 .collect::<Vec<_>>()
@@ -644,7 +655,7 @@ fn handle_clipboard_menu(mut state: AppState, key: KeyCode) -> (AppState, Vec<Ef
             effects.push(Effect::CopyToClipboard(content));
             state.menu_mode = MenuMode::None;
         }
-        KeyCode::Char('5') | KeyCode::Char('6') => {
+        KeyCode::Char('5') => {
             // All logs
             let content: String = state.logs.entries
                 .iter()
@@ -652,6 +663,31 @@ fn handle_clipboard_menu(mut state: AppState, key: KeyCode) -> (AppState, Vec<Ef
                 .collect::<Vec<_>>()
                 .join("\n");
             effects.push(Effect::CopyToClipboard(content));
+            state.menu_mode = MenuMode::None;
+        }
+        KeyCode::Char('6') => {
+            // Export all logs to a timestamped file
+            let content: String = state.logs.entries
+                .iter()
+                .map(|e| e.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let container_name = state.selected_container()
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| "container".to_string());
+            effects.push(Effect::ExportLogs { content, container_name });
+            state.menu_mode = MenuMode::None;
+        }
+        KeyCode::Char('7') => {
+            // Print all loaded (filtered) logs to the terminal scrollback for
+            // manual selection. Works over SSH on any terminal (incl. GNOME
+            // Terminal, which can't do OSC 52).
+            let content: String = state.logs
+                .filtered_entries()
+                .map(|e| e.content.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            effects.push(Effect::PrintForManualCopy(content));
             state.menu_mode = MenuMode::None;
         }
         KeyCode::Esc | KeyCode::Char('q') => {

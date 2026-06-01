@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use crate::docker::{Container, Stats};
-use crate::app::message::LogEntry;
+use crate::app::message::{LogEntry, LogLevel};
 
 /// View mode - which panel is displayed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,16 +28,11 @@ pub enum MenuMode {
 
 /// Transition state for loading screens (v3.3.0)
 /// Used to show feedback during view/container switches
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum TransitionState {
     Loading(String),
+    #[default]
     Ready,
-}
-
-impl Default for TransitionState {
-    fn default() -> Self {
-        Self::Ready
-    }
 }
 
 /// Notification type for temporary messages
@@ -92,12 +87,17 @@ pub struct AppState {
 
     // === UI State ===
     pub numeric_input: NumericInputState,
+    pub search: SearchState,
     pub notification: Option<Notification>,
     pub viewport_height: usize,
+    /// Real height of logs panel (for accurate scroll calculations)
+    pub logs_panel_height: usize,
 
     // === System State ===
     pub should_quit: bool,
     pub last_refresh: std::time::Instant,
+    /// Last time the user pressed a key — drives adaptive tick cadence.
+    pub last_activity: std::time::Instant,
 
     // === Stream Management (v3.2.2) ===
     /// Generation counter - incremented on each container switch
@@ -142,6 +142,18 @@ pub struct LogsState {
 
     /// Maximum buffer capacity
     pub capacity: usize,
+
+    /// Active log-level filter. `None` shows every line.
+    ///
+    /// NOTE: mutating this field directly invalidates `filtered_count`. After
+    /// changing it you MUST call [`LogsState::recount_filtered`] (the only
+    /// real caller is the `Tab` handler in `update.rs`).
+    pub level_filter: Option<LogLevel>,
+
+    /// Cached number of entries passing `level_filter`, kept in sync
+    /// incrementally by `push`/`prepend`/`clear`/trim so `filtered_len()` is
+    /// O(1) instead of O(n) on the hot log path. Rebuilt by `recount_filtered`.
+    filtered_count: usize,
 }
 
 impl Default for LogsState {
@@ -154,11 +166,21 @@ impl Default for LogsState {
             oldest_timestamp: None,
             total_loaded: 0,
             capacity: 10000,
+            level_filter: None,
+            filtered_count: 0,
         }
     }
 }
 
 impl LogsState {
+    /// Whether an entry passes the given filter (`None` = everything passes).
+    fn passes(filter: Option<LogLevel>, entry: &LogEntry) -> bool {
+        match filter {
+            Some(level) => entry.level == level,
+            None => true,
+        }
+    }
+
     /// Clear all logs and reset state
     pub fn clear(&mut self) {
         self.entries.clear();
@@ -167,6 +189,7 @@ impl LogsState {
         self.has_more_history = true;
         self.oldest_timestamp = None;
         self.total_loaded = 0;
+        self.filtered_count = 0;
     }
 
     /// Push a new log entry to the end
@@ -176,12 +199,21 @@ impl LogsState {
             self.oldest_timestamp = entry.timestamp;
         }
 
+        let filter = self.level_filter;
+        if Self::passes(filter, &entry) {
+            self.filtered_count += 1;
+        }
+
         self.entries.push_back(entry);
         self.total_loaded += 1;
 
         // Trim from front if over capacity
         while self.entries.len() > self.capacity {
-            self.entries.pop_front();
+            if let Some(removed) = self.entries.pop_front() {
+                if Self::passes(filter, &removed) {
+                    self.filtered_count = self.filtered_count.saturating_sub(1);
+                }
+            }
         }
     }
 
@@ -193,6 +225,13 @@ impl LogsState {
         }
 
         let count = entries.len();
+
+        // Count how many of the new entries are actually visible under the
+        // active filter — the scroll shift below must be in filtered-index space.
+        let visible_added = match self.level_filter {
+            None => count,
+            Some(level) => entries.iter().filter(|e| e.level == level).count(),
+        };
 
         // CRITICAL FIX (v3.2.2): Get oldest timestamp BEFORE reversing
         // Entries arrive in chronological order (oldest first from Docker API)
@@ -208,6 +247,9 @@ impl LogsState {
             }
         }
 
+        // Newly inserted visible entries grow the filtered count.
+        self.filtered_count += visible_added;
+
         // Insert in reverse order so oldest ends up at front
         for entry in entries.into_iter().rev() {
             self.entries.push_front(entry);
@@ -216,19 +258,52 @@ impl LogsState {
         self.total_loaded += count;
 
         // Trim from back if over capacity
+        let filter = self.level_filter;
         while self.entries.len() > self.capacity {
-            self.entries.pop_back();
+            if let Some(removed) = self.entries.pop_back() {
+                if Self::passes(filter, &removed) {
+                    self.filtered_count = self.filtered_count.saturating_sub(1);
+                }
+            }
         }
 
         // ALWAYS adjust scroll position to maintain current view
-        // When historical logs are prepended, shift scroll by the count to keep
-        // viewing the same logs (not the newly loaded historical ones)
-        self.scroll_position = self.scroll_position.saturating_add(count);
+        // When historical logs are prepended, shift scroll by the visible count
+        // to keep viewing the same logs (not the newly loaded historical ones)
+        self.scroll_position = self.scroll_position.saturating_add(visible_added);
     }
 
-    /// Get the maximum scroll position
+    /// Iterator over entries that pass the active level filter.
+    pub fn filtered_entries(&self) -> impl Iterator<Item = &LogEntry> {
+        let filter = self.level_filter;
+        self.entries.iter().filter(move |e| match filter {
+            Some(level) => e.level == level,
+            None => true,
+        })
+    }
+
+    /// Number of entries visible under the active level filter.
+    ///
+    /// O(1): returns the incrementally-maintained cache. Stays correct as long
+    /// as `level_filter` is only changed via [`LogsState::recount_filtered`].
+    pub fn filtered_len(&self) -> usize {
+        self.filtered_count
+    }
+
+    /// Rebuild the cached filtered count from scratch (O(n)).
+    ///
+    /// Must be called after `level_filter` changes; everywhere else the count
+    /// is maintained incrementally by `push`/`prepend`/`clear`/trim.
+    pub fn recount_filtered(&mut self) {
+        self.filtered_count = match self.level_filter {
+            None => self.entries.len(),
+            Some(level) => self.entries.iter().filter(|e| e.level == level).count(),
+        };
+    }
+
+    /// Get the maximum scroll position (in filtered-index space)
     pub fn max_scroll(&self, viewport_height: usize) -> usize {
-        self.entries.len().saturating_sub(viewport_height)
+        self.filtered_len().saturating_sub(viewport_height)
     }
 
     /// Check if scroll is at the bottom
@@ -241,13 +316,12 @@ impl LogsState {
         self.scroll_position = self.max_scroll(viewport_height);
     }
 
-    /// Get visible entries for rendering
-    /// Uses bounds-safe scroll position to prevent empty results
+    /// Get visible entries for rendering (respects the active level filter).
+    /// Uses bounds-safe scroll position to prevent empty results.
     pub fn visible_entries(&self, viewport_height: usize) -> impl Iterator<Item = &LogEntry> {
         // Ensure scroll_position doesn't exceed valid range
-        let safe_position = self.scroll_position.min(self.entries.len().saturating_sub(1));
-        self.entries
-            .iter()
+        let safe_position = self.scroll_position.min(self.filtered_len().saturating_sub(1));
+        self.filtered_entries()
             .skip(safe_position)
             .take(viewport_height)
     }
@@ -286,6 +360,63 @@ impl NumericInputState {
     }
 }
 
+/// State for in-log search mode
+#[derive(Debug, Clone, Default)]
+pub struct SearchState {
+    /// Whether the search input bar is open and capturing keystrokes.
+    pub active: bool,
+    /// Current search query.
+    pub query: String,
+    /// Positions (in filtered-index space) of entries matching the query.
+    pub matches: Vec<usize>,
+    /// Index into `matches` for the currently highlighted match.
+    pub current: usize,
+}
+
+impl SearchState {
+    /// Open the input bar and reset previous results.
+    pub fn start(&mut self) {
+        self.active = true;
+        self.query.clear();
+        self.matches.clear();
+        self.current = 0;
+    }
+
+    pub fn push(&mut self, c: char) {
+        self.query.push(c);
+    }
+
+    pub fn pop(&mut self) {
+        self.query.pop();
+    }
+
+    /// Close the bar and drop the query so highlighting stops.
+    pub fn cancel(&mut self) {
+        self.active = false;
+        self.query.clear();
+        self.matches.clear();
+        self.current = 0;
+    }
+
+    /// Advance to the next match, wrapping around. Returns its filtered position.
+    pub fn next(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        self.current = (self.current + 1) % self.matches.len();
+        Some(self.matches[self.current])
+    }
+
+    /// Go to the previous match, wrapping around. Returns its filtered position.
+    pub fn prev(&mut self) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+        self.current = (self.current + self.matches.len() - 1) % self.matches.len();
+        Some(self.matches[self.current])
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self {
@@ -297,10 +428,13 @@ impl Default for AppState {
             logs: LogsState::default(),
             stats: None,
             numeric_input: NumericInputState::default(),
+            search: SearchState::default(),
             notification: None,
             viewport_height: 20,
+            logs_panel_height: 20, // Will be updated by UI on first render
             should_quit: false,
             last_refresh: std::time::Instant::now(),
+            last_activity: std::time::Instant::now(),
             stream_generation: 0,
             current_container_id: None,
             // v3.3.0: Rendering control
@@ -317,11 +451,6 @@ impl AppState {
         self.containers.get(self.selected_container)
     }
 
-    /// Get the ID of the currently selected container
-    pub fn selected_container_id(&self) -> Option<&str> {
-        self.selected_container().map(|c| c.id.as_str())
-    }
-
     /// Check if the selected container is running
     pub fn is_selected_running(&self) -> bool {
         self.selected_container()
@@ -336,5 +465,128 @@ impl AppState {
                 self.notification = None;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(s: &str) -> LogEntry {
+        LogEntry::from_raw(s)
+    }
+
+    #[test]
+    fn push_trims_to_capacity_dropping_oldest() {
+        let mut logs = LogsState {
+            capacity: 3,
+            ..Default::default()
+        };
+        for i in 0..5 {
+            logs.push(entry(&format!("INFO line {i}")));
+        }
+        assert_eq!(logs.entries.len(), 3);
+        assert!(logs.entries.front().unwrap().content.contains("line 2"));
+        assert!(logs.entries.back().unwrap().content.contains("line 4"));
+    }
+
+    #[test]
+    fn prepend_keeps_chronological_order_and_shifts_scroll() {
+        let mut logs = LogsState::default();
+        logs.push(entry("INFO new1"));
+        logs.push(entry("INFO new2"));
+        logs.scroll_position = 0;
+
+        // Batch arrives oldest-first from the Docker API.
+        logs.prepend(vec![entry("INFO old1"), entry("INFO old2")]);
+
+        let order: Vec<&str> = logs.entries.iter().map(|e| e.content.as_str()).collect();
+        assert_eq!(order, vec!["INFO old1", "INFO old2", "INFO new1", "INFO new2"]);
+        // No filter: scroll shifts by the full batch count to keep the same view.
+        assert_eq!(logs.scroll_position, 2);
+    }
+
+    #[test]
+    fn filter_changes_visible_count_and_entries() {
+        let mut logs = LogsState::default();
+        logs.push(entry("ERROR a"));
+        logs.push(entry("INFO b"));
+        logs.push(entry("ERROR c"));
+
+        assert_eq!(logs.filtered_len(), 3);
+
+        logs.level_filter = Some(LogLevel::Error);
+        logs.recount_filtered();
+        assert_eq!(logs.filtered_len(), 2);
+        let got: Vec<&str> = logs.filtered_entries().map(|e| e.content.as_str()).collect();
+        assert_eq!(got, vec!["ERROR a", "ERROR c"]);
+
+        // max_scroll and visible_entries operate in filtered space.
+        assert_eq!(logs.max_scroll(1), 1);
+        let visible: Vec<&str> = logs.visible_entries(1).map(|e| e.content.as_str()).collect();
+        assert_eq!(visible, vec!["ERROR a"]);
+    }
+
+    #[test]
+    fn prepend_scroll_shift_counts_only_filtered_entries() {
+        let mut logs = LogsState::default();
+        logs.push(entry("ERROR e1"));
+        logs.level_filter = Some(LogLevel::Error);
+        logs.recount_filtered();
+        logs.scroll_position = 0;
+
+        // One matching (ERROR) + one non-matching (INFO) prepended.
+        logs.prepend(vec![entry("INFO old"), entry("ERROR old2")]);
+
+        // Only the visible (ERROR) entry shifts the filtered view.
+        assert_eq!(logs.scroll_position, 1);
+    }
+
+    /// The incrementally-maintained `filtered_count` must always match a
+    /// from-scratch recount across push / prepend / capacity trim / filter
+    /// changes — otherwise `filtered_len()` (and scroll bounds) would drift.
+    #[test]
+    fn filtered_count_cache_never_drifts() {
+        let brute = |logs: &LogsState| -> usize {
+            match logs.level_filter {
+                None => logs.entries.len(),
+                Some(level) => logs.entries.iter().filter(|e| e.level == level).count(),
+            }
+        };
+
+        let mut logs = LogsState {
+            capacity: 4,
+            ..Default::default()
+        };
+
+        // Push past capacity with mixed levels (exercises front-trim).
+        for i in 0..8 {
+            let level = if i % 2 == 0 { "ERROR" } else { "INFO" };
+            logs.push(entry(&format!("{level} line {i}")));
+            assert_eq!(logs.filtered_len(), brute(&logs), "after push {i}");
+        }
+
+        // Apply a filter and confirm the recount matches.
+        logs.level_filter = Some(LogLevel::Error);
+        logs.recount_filtered();
+        assert_eq!(logs.filtered_len(), brute(&logs), "after filter set");
+
+        // Prepend a mixed batch under an active filter (exercises back-trim).
+        logs.prepend(vec![
+            entry("ERROR old1"),
+            entry("INFO old2"),
+            entry("ERROR old3"),
+        ]);
+        assert_eq!(logs.filtered_len(), brute(&logs), "after prepend under filter");
+
+        // Clearing the filter recounts to the full buffer length.
+        logs.level_filter = None;
+        logs.recount_filtered();
+        assert_eq!(logs.filtered_len(), logs.entries.len(), "after filter clear");
+        assert_eq!(logs.filtered_len(), brute(&logs));
+
+        // Clear resets the cache to zero.
+        logs.clear();
+        assert_eq!(logs.filtered_len(), 0);
     }
 }

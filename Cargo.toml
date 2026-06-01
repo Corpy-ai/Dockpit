@@ -1,9 +1,9 @@
 [package]
 name = "docker-manager"
-version = "3.0.0"
+version = "3.3.0"
 edition = "2021"
 authors = ["uniCommerce Team"]
-description = "Docker Container Manager - Fast, efficient, and visually perfect"
+description = "Docker Container Manager - Elm Architecture, infinite scroll logs, zero flickering"
 license = "MIT"
 
 [dependencies]
@@ -16,6 +16,7 @@ bollard = "0.17"  # Docker API client for Rust
 
 # Async runtime
 tokio = { version = "1.42", features = ["full"] }
+tokio-util = "0.7"  # Task utilities and cancellation
 futures-util = "0.3"
 
 # Serialization

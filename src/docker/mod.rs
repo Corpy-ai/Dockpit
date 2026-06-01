@@ -4,7 +4,7 @@ use bollard::container::{
     StartContainerOptions, StatsOptions, StopContainerOptions,
 };
 use bollard::exec::{CreateExecOptions, StartExecResults};
-use bollard::models::{ContainerInspectResponse, ContainerSummary, PortTypeEnum, SystemDataUsageResponse};
+use bollard::models::{ContainerSummary, PortTypeEnum};
 use bollard::Docker;
 use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -53,7 +53,15 @@ pub struct Stats {
 }
 
 pub struct DockerManager {
-    docker: Docker,
+    pub docker: Docker,
+}
+
+impl Clone for DockerManager {
+    fn clone(&self) -> Self {
+        Self {
+            docker: self.docker.clone(),
+        }
+    }
 }
 
 impl DockerManager {
@@ -62,9 +70,15 @@ impl DockerManager {
         Ok(Self { docker })
     }
 
-    pub async fn list_containers(&self) -> Result<Vec<Container>> {
+    /// Get a reference to the inner Docker client
+    pub fn docker(&self) -> &Docker {
+        &self.docker
+    }
+
+    /// List containers. When `all` is false, only running containers are returned.
+    pub async fn list_containers(&self, all: bool) -> Result<Vec<Container>> {
         let options = Some(ListContainersOptions::<String> {
-            all: true,
+            all,
             ..Default::default()
         });
 
@@ -169,7 +183,7 @@ impl DockerManager {
         container_id: &str,
         lines: usize,
         tx: mpsc::Sender<String>,
-    ) -> Result<()> {
+    ) -> Result<tokio::task::JoinHandle<()>> {
         let options = Some(LogsOptions::<String> {
             stdout: true,
             stderr: true,
@@ -181,7 +195,7 @@ impl DockerManager {
 
         let mut stream = self.docker.logs(container_id, options);
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             while let Some(log_result) = stream.next().await {
                 if let Ok(log) = log_result {
                     let log_str = log.to_string();
@@ -192,14 +206,73 @@ impl DockerManager {
             }
         });
 
-        Ok(())
+        Ok(handle)
+    }
+
+    /// Get historical logs using timestamp-based pagination (efficient infinite scroll).
+    ///
+    /// This method fetches logs BEFORE a given timestamp, allowing efficient
+    /// pagination without loading all logs into memory.
+    ///
+    /// # Arguments
+    /// * `container_id` - The container to get logs from
+    /// * `batch_size` - Number of log lines to fetch
+    /// * `before_timestamp` - Only fetch logs before this timestamp (None = from now)
+    /// * `tx` - Channel to send logs through
+    pub async fn get_historical_logs_by_timestamp(
+        &self,
+        container_id: &str,
+        batch_size: usize,
+        before_timestamp: Option<i64>,
+        tx: mpsc::Sender<String>,
+    ) -> Result<tokio::task::JoinHandle<()>> {
+        let docker = self.docker.clone();
+        let container_id = container_id.to_string();
+
+        let handle = tokio::spawn(async move {
+            // Build options with timestamp filter
+            let mut options = LogsOptions::<String> {
+                stdout: true,
+                stderr: true,
+                follow: false,           // NO follow - just historical
+                timestamps: true,        // Include timestamps for pagination
+                tail: batch_size.to_string(), // Limit to batch size
+                ..Default::default()
+            };
+
+            // If we have a timestamp, use "until" to get logs BEFORE it
+            // Docker's "until" parameter: Show logs before a timestamp (expects i64)
+            if let Some(ts) = before_timestamp {
+                options.until = ts;
+            }
+
+            let mut stream = docker.logs(&container_id, Some(options));
+            let mut logs = Vec::new();
+
+            // Collect logs (already limited by tail parameter)
+            while let Some(log_result) = stream.next().await {
+                if let Ok(log) = log_result {
+                    logs.push(log.to_string());
+                }
+            }
+
+            // Send logs in chronological order (oldest first)
+            // Docker returns newest first with tail, so we reverse
+            for log in logs.into_iter().rev() {
+                if tx.send(log).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(handle)
     }
 
     pub async fn get_container_stats(
         &self,
         container_id: &str,
         tx: mpsc::Sender<Stats>,
-    ) -> Result<()> {
+    ) -> Result<tokio::task::JoinHandle<()>> {
         let options = Some(StatsOptions {
             stream: true,
             ..Default::default()
@@ -207,7 +280,7 @@ impl DockerManager {
 
         let mut stream = self.docker.stats(container_id, options);
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             while let Some(stats_result) = stream.next().await {
                 if let Ok(stats) = stats_result {
                     let cpu_delta = stats.cpu_stats.cpu_usage.total_usage
@@ -215,7 +288,7 @@ impl DockerManager {
                     let system_delta =
                         stats.cpu_stats.system_cpu_usage.unwrap_or(0)
                             - stats.precpu_stats.system_cpu_usage.unwrap_or(0);
-                    
+
                     let cpu_percent = if system_delta > 0 && cpu_delta > 0 {
                         (cpu_delta as f64 / system_delta as f64) * 100.0
                             * stats.cpu_stats.online_cpus.unwrap_or(1) as f64
@@ -224,8 +297,14 @@ impl DockerManager {
                     };
 
                     let memory_usage = stats.memory_stats.usage.unwrap_or(0);
-                    let memory_limit = stats.memory_stats.limit.unwrap_or(1);
-                    let memory_percent = (memory_usage as f64 / memory_limit as f64) * 100.0;
+                    let memory_limit = stats.memory_stats.limit.unwrap_or(0);
+                    // Guard against a missing/zero limit: dividing by it would yield
+                    // an absurd percentage (millions of %) instead of a real reading.
+                    let memory_percent = if memory_limit > 0 {
+                        (memory_usage as f64 / memory_limit as f64) * 100.0
+                    } else {
+                        0.0
+                    };
 
                     let network_rx = stats
                         .networks
@@ -281,12 +360,7 @@ impl DockerManager {
             }
         });
 
-        Ok(())
-    }
-
-    pub async fn inspect_container(&self, container_id: &str) -> Result<ContainerInspectResponse> {
-        let result = self.docker.inspect_container(container_id, None).await?;
-        Ok(result)
+        Ok(handle)
     }
 
     pub async fn exec_in_container(&self, container_id: &str, cmd: Vec<&str>) -> Result<String> {
@@ -310,29 +384,5 @@ impl DockerManager {
         } else {
             Ok(String::new())
         }
-    }
-
-    pub async fn get_container_processes(&self, container_id: &str) -> Result<String> {
-        let result = self.docker.top_processes::<String>(container_id, None).await?;
-        
-        let mut output = String::new();
-        if let Some(titles) = result.titles {
-            output.push_str(&titles.join("\t"));
-            output.push('\n');
-        }
-        
-        if let Some(processes) = result.processes {
-            for process in processes {
-                output.push_str(&process.join("\t"));
-                output.push('\n');
-            }
-        }
-        
-        Ok(output)
-    }
-
-    pub async fn get_disk_usage(&self) -> Result<SystemDataUsageResponse> {
-        let result = self.docker.df().await?;
-        Ok(result)
     }
 }

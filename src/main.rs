@@ -1,7 +1,7 @@
+mod app;
 mod docker;
 mod ui;
 mod utils;
-mod config;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -13,8 +13,8 @@ use std::io::Write;
 #[derive(Parser)]
 #[command(name = "docker-manager")]
 #[command(author = "uniCommerce Team")]
-#[command(version = "3.0.0")]
-#[command(about = "Fast and efficient Docker container manager with perfect visual interface", long_about = None)]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(about = "Fast and efficient Docker container manager with perfect visual interface - Zero glitches guaranteed", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -22,10 +22,6 @@ struct Cli {
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
-
-    /// Save last selected container for next session
-    #[arg(short, long, default_value = "true")]
-    save_state: bool,
 }
 
 #[derive(Subcommand)]
@@ -95,7 +91,7 @@ async fn main() -> Result<()> {
         })
         .init();
 
-    info!("Docker Manager v3.0 starting...");
+    info!("Docker Manager v{} starting...", env!("CARGO_PKG_VERSION"));
 
     // Create Docker manager
     let docker_manager = match DockerManager::new().await {
@@ -147,8 +143,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn handle_list_command(docker: DockerManager, _all: bool) -> Result<()> {
-    let containers = docker.list_containers().await?;
+async fn handle_list_command(docker: DockerManager, all: bool) -> Result<()> {
+    let containers = docker.list_containers(all).await?;
     
     println!("{:<3} {:<30} {:<20} {:<30} {:<10}", 
              "#", "NAME", "IMAGE", "STATUS", "STATE");
@@ -234,22 +230,18 @@ async fn handle_stats_command(docker: DockerManager, container: Option<&str>) ->
         println!("{:<15} {:<15} {:<20} {:<15} {:<15}", 
                  "CPU %", "MEM USAGE", "MEM %", "NET I/O", "BLOCK I/O");
         
-        while let Some(stats) = rx.recv().await {
+        // CLI mode shows a single snapshot, then exits.
+        if let Some(stats) = rx.recv().await {
             println!("{:<15.2} {:<15} {:<20.2} {:<15} {:<15}",
                      stats.cpu_percent,
                      format!("{:.2} MB", stats.memory_usage as f64 / 1_048_576.0),
                      stats.memory_percent,
-                     format!("{:.2}/{:.2} MB", 
+                     format!("{:.2}/{:.2} MB",
                              stats.network_rx as f64 / 1_048_576.0,
                              stats.network_tx as f64 / 1_048_576.0),
                      format!("{:.2}/{:.2} MB",
                              stats.block_read as f64 / 1_048_576.0,
                              stats.block_write as f64 / 1_048_576.0));
-            
-            // For non-follow mode, just show one snapshot
-            if container.is_some() {
-                break;
-            }
         }
     } else {
         println!("Please specify a container name to show statistics");

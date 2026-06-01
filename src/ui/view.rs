@@ -8,8 +8,95 @@ use ratatui::{
 use chrono::Local;
 
 use crate::app::{AppState, ViewMode, NavigationMode, MenuMode, LogLevel};
+use crate::app::message::LogEntry;
 use crate::app::state::TransitionState;
 use crate::docker::ContainerState;
+
+/// Short uppercase label for a log level (used in the filter indicator).
+fn level_label(level: LogLevel) -> &'static str {
+    match level {
+        LogLevel::Error => "ERROR",
+        LogLevel::Warn => "WARN",
+        LogLevel::Info => "INFO",
+        LogLevel::Debug => "DEBUG",
+        LogLevel::Trace => "TRACE",
+        LogLevel::Unknown => "UNKNOWN",
+    }
+}
+
+/// The terminal color used to render each log level.
+fn level_color(level: LogLevel) -> Color {
+    match level {
+        LogLevel::Error => Color::Red,
+        LogLevel::Warn => Color::Yellow,
+        LogLevel::Info => Color::Green,
+        LogLevel::Debug => Color::Blue,
+        LogLevel::Trace => Color::DarkGray,
+        LogLevel::Unknown => Color::White,
+    }
+}
+
+/// Build a styled log line, optionally highlighting search-query occurrences.
+fn build_log_line<'a>(entry: &'a LogEntry, query_upper: Option<&str>) -> Line<'a> {
+    let base = Style::default().fg(level_color(entry.level));
+    match query_upper {
+        Some(q) if !q.is_empty() => Line::from(highlight_spans(&entry.content, q, base)),
+        _ => Line::from(Span::styled(entry.content.as_str(), base)),
+    }
+}
+
+/// Split `content` into spans, highlighting ASCII case-insensitive occurrences of
+/// `needle_upper` (which must already be uppercase). Match positions always fall on
+/// char boundaries: an uppercase-ASCII needle can only match single-byte chars, so
+/// the byte slicing below never lands mid-UTF-8.
+fn highlight_spans<'a>(content: &'a str, needle_upper: &str, base: Style) -> Vec<Span<'a>> {
+    let hl = base
+        .bg(Color::Yellow)
+        .fg(Color::Black)
+        .add_modifier(Modifier::BOLD);
+    let bytes = content.as_bytes();
+    let n = needle_upper.len();
+    let mut spans = Vec::new();
+    let mut seg_start = 0;
+    let mut i = 0;
+    while n > 0 && i + n <= bytes.len() {
+        let is_match = bytes[i..i + n]
+            .iter()
+            .zip(needle_upper.as_bytes())
+            .all(|(a, b)| a.to_ascii_uppercase() == *b);
+        if is_match {
+            if seg_start < i {
+                spans.push(Span::styled(&content[seg_start..i], base));
+            }
+            spans.push(Span::styled(&content[i..i + n], hl));
+            i += n;
+            seg_start = i;
+        } else {
+            i += 1;
+        }
+    }
+    if seg_start < content.len() {
+        spans.push(Span::styled(&content[seg_start..], base));
+    }
+    spans
+}
+
+/// Uppercased search query, or `None` when search is inactive/empty.
+fn search_query_upper(state: &AppState) -> Option<String> {
+    if state.search.query.is_empty() {
+        None
+    } else {
+        Some(state.search.query.to_ascii_uppercase())
+    }
+}
+
+/// Filter indicator suffix for log panel titles (empty when no filter is active).
+fn filter_suffix(state: &AppState) -> String {
+    match state.logs.level_filter {
+        Some(level) => format!(" [filter:{}]", level_label(level)),
+        None => String::new(),
+    }
+}
 
 /// Pure rendering function - reads state, produces UI, no side effects
 pub fn render(frame: &mut Frame, state: &AppState) {
@@ -147,34 +234,29 @@ fn render_logs_panel(frame: &mut Frame, area: Rect, state: &AppState) {
     // Check if we're in loading state for this panel
     let is_loading = matches!(state.transition_state, TransitionState::Loading(_));
 
-    // Get visible log entries
+    // Get visible log entries (highlighting search matches when searching)
+    let query_upper = search_query_upper(state);
     let logs_text: Vec<Line> = state.logs
         .visible_entries(viewport_height)
-        .map(|entry| {
-            let level_color = match entry.level {
-                LogLevel::Error => Color::Red,
-                LogLevel::Warn => Color::Yellow,
-                LogLevel::Info => Color::Green,
-                LogLevel::Debug => Color::Blue,
-                LogLevel::Trace => Color::DarkGray,
-                LogLevel::Unknown => Color::White,
-            };
-            Line::from(Span::styled(&entry.content, Style::default().fg(level_color)))
-        })
+        .map(|entry| build_log_line(entry, query_upper.as_deref()))
         .collect();
 
-    // Build title with loading indicator if active
+    let total = state.logs.filtered_len();
+
+    // Build title with loading + filter indicators
     let loading_suffix = if state.logs.is_loading_more || is_loading { " ⏳" } else { "" };
+    let filter = filter_suffix(state);
     let title = if let Some(container) = state.selected_container() {
         format!(
-            " Logs: {} [{}/{}]{} ",
+            " Logs: {} [{}/{}]{}{} ",
             container.name,
             state.logs.scroll_position + 1,
-            state.logs.entries.len().max(1),
+            total.max(1),
+            filter,
             loading_suffix
         )
     } else {
-        format!(" Logs{} ", loading_suffix)
+        format!(" Logs{}{} ", filter, loading_suffix)
     };
 
     let title_style = if state.logs.is_loading_more || is_loading {
@@ -193,10 +275,10 @@ fn render_logs_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 
     frame.render_widget(logs, area);
 
-    // Scrollbar
-    if state.logs.entries.len() > viewport_height {
+    // Scrollbar (based on the filtered count, matching scroll_position's space)
+    if total > viewport_height {
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
-        let mut scrollbar_state = ScrollbarState::new(state.logs.entries.len())
+        let mut scrollbar_state = ScrollbarState::new(total)
             .position(state.logs.scroll_position);
         frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
     }
@@ -213,33 +295,28 @@ fn render_expanded_logs(frame: &mut Frame, area: Rect, state: &AppState) {
     // Check if we're in loading state
     let is_loading = matches!(state.transition_state, TransitionState::Loading(_));
 
+    let query_upper = search_query_upper(state);
     let logs_text: Vec<Line> = state.logs
         .visible_entries(viewport_height)
-        .map(|entry| {
-            let level_color = match entry.level {
-                LogLevel::Error => Color::Red,
-                LogLevel::Warn => Color::Yellow,
-                LogLevel::Info => Color::Green,
-                LogLevel::Debug => Color::Blue,
-                LogLevel::Trace => Color::DarkGray,
-                LogLevel::Unknown => Color::White,
-            };
-            Line::from(Span::styled(&entry.content, Style::default().fg(level_color)))
-        })
+        .map(|entry| build_log_line(entry, query_upper.as_deref()))
         .collect();
 
-    // Build title with loading indicator if active
+    let total = state.logs.filtered_len();
+
+    // Build title with loading + filter indicators
     let loading_suffix = if state.logs.is_loading_more || is_loading { " ⏳" } else { "" };
+    let filter = filter_suffix(state);
     let title = if let Some(container) = state.selected_container() {
         format!(
-            " Logs (Expanded): {} [{}/{}]{} - Press F to minimize ",
+            " Logs (Expanded): {} [{}/{}]{}{} - Press F to minimize ",
             container.name,
             state.logs.scroll_position + 1,
-            state.logs.entries.len().max(1),
+            total.max(1),
+            filter,
             loading_suffix
         )
     } else {
-        format!(" Logs (Expanded){} - Press F to minimize ", loading_suffix)
+        format!(" Logs (Expanded){}{} - Press F to minimize ", filter, loading_suffix)
     };
 
     let title_style = if state.logs.is_loading_more || is_loading {
@@ -258,10 +335,10 @@ fn render_expanded_logs(frame: &mut Frame, area: Rect, state: &AppState) {
 
     frame.render_widget(logs, area);
 
-    // Scrollbar
-    if state.logs.entries.len() > viewport_height {
+    // Scrollbar (based on the filtered count, matching scroll_position's space)
+    if total > viewport_height {
         let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
-        let mut scrollbar_state = ScrollbarState::new(state.logs.entries.len())
+        let mut scrollbar_state = ScrollbarState::new(total)
             .position(state.logs.scroll_position);
         frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
     }
@@ -376,10 +453,10 @@ fn render_stats_panel(frame: &mut Frame, area: Rect, state: &AppState) {
 fn render_footer(frame: &mut Frame, area: Rect, state: &AppState) {
     let help_text = match state.menu_mode {
         MenuMode::DockerOps => "1:Start 2:Stop 3:Restart 4:Pause 5:Unpause 6:Remove | ESC:Close",
-        MenuMode::Clipboard => "1:Last100 2:Last500 3:Visible 4:FromPos 5:All | ESC:Close",
+        MenuMode::Clipboard => "1:Last100 2:Last500 3:Visible 4:FromPos 5:All 6:Export 7:Print | ESC:Close",
         MenuMode::None => match state.navigation_mode {
-            NavigationMode::Containers => "↑↓:Select | L:Logs S:Stats | D:Docker C:Copy R:Restart | N/#:Jump | Q:Quit",
-            NavigationMode::Logs | NavigationMode::Stats => "↑↓:Scroll | PgUp/PgDn:Page | Home/End | ←:Back F:Expand | Q:Quit",
+            NavigationMode::Containers => "↑↓:Select | L:Logs S:Stats | /:Search Tab:Filter | D:Docker C:Copy R:Restart | #:Jump | Q:Quit",
+            NavigationMode::Logs | NavigationMode::Stats => "↑↓:Scroll | /:Search n/N:Match Tab:Filter | Home/End ←:Back F:Expand | Q:Quit",
         },
     };
 
@@ -388,6 +465,15 @@ fn render_footer(frame: &mut Frame, area: Rect, state: &AppState) {
         let color = if notif.is_error { Color::Red } else { Color::Green };
         vec![
             Line::from(Span::styled(&notif.message, Style::default().fg(color).add_modifier(Modifier::BOLD))),
+        ]
+    } else if state.search.active {
+        vec![
+            Line::from(vec![
+                Span::styled("Search: ", Style::default().fg(Color::Yellow)),
+                Span::styled(&state.search.query, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                Span::styled("_", Style::default().fg(Color::White).add_modifier(Modifier::RAPID_BLINK)),
+                Span::styled("  (Enter to search, Esc to cancel)", Style::default().fg(Color::DarkGray)),
+            ])
         ]
     } else if state.numeric_input.active {
         vec![
@@ -417,35 +503,26 @@ fn render_overlay_menus(frame: &mut Frame, area: Rect, state: &AppState) {
 }
 
 fn render_docker_ops_menu(frame: &mut Frame, area: Rect, state: &AppState) {
+    use ratatui::widgets::Clear;
+
     let container_name = state.selected_container()
         .map(|c| c.name.as_str())
         .unwrap_or("Unknown");
 
+    // Solid menu palette - high contrast so it never blends with the logs behind it.
+    let bg = Color::Blue;
+    let num = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+
     let menu_text = vec![
         Line::from(""),
+        Line::from(vec![Span::styled("  1. ", num), Span::raw("Start container")]),
+        Line::from(vec![Span::styled("  2. ", num), Span::raw("Stop container")]),
+        Line::from(vec![Span::styled("  3. ", num), Span::raw("Restart container")]),
+        Line::from(vec![Span::styled("  4. ", num), Span::raw("Pause container")]),
+        Line::from(vec![Span::styled("  5. ", num), Span::raw("Unpause container")]),
         Line::from(vec![
-            Span::styled("  1. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Start container"),
-        ]),
-        Line::from(vec![
-            Span::styled("  2. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Stop container"),
-        ]),
-        Line::from(vec![
-            Span::styled("  3. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Restart container"),
-        ]),
-        Line::from(vec![
-            Span::styled("  4. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Pause container"),
-        ]),
-        Line::from(vec![
-            Span::styled("  5. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Unpause container"),
-        ]),
-        Line::from(vec![
-            Span::styled("  6. ", Style::default().fg(Color::Yellow)),
-            Span::styled("Remove container", Style::default().fg(Color::Red)),
+            Span::styled("  6. ", num),
+            Span::styled("Remove container", Style::default().fg(Color::LightRed).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(""),
         Line::from(Span::styled("  ESC to close", Style::default().fg(Color::Gray))),
@@ -455,53 +532,61 @@ fn render_docker_ops_menu(frame: &mut Frame, area: Rect, state: &AppState) {
     let menu_height = 12;
     let menu_area = centered_rect(menu_width, menu_height, area);
 
+    // Wipe whatever is behind the menu so the background is fully opaque.
+    frame.render_widget(Clear, menu_area);
+
     let menu = Paragraph::new(menu_text)
+        .style(Style::default().bg(bg).fg(Color::White))
         .block(Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Magenta))
+            .border_style(Style::default().fg(Color::White).bg(bg).add_modifier(Modifier::BOLD))
             .title(format!(" Docker: {} ", container_name))
-            .style(Style::default().bg(Color::DarkGray)));
+            .title_style(Style::default().fg(Color::White).bg(bg).add_modifier(Modifier::BOLD))
+            .style(Style::default().bg(bg)));
 
     frame.render_widget(menu, menu_area);
 }
 
 fn render_clipboard_menu(frame: &mut Frame, area: Rect) {
+    use ratatui::widgets::Clear;
+
+    let bg = Color::Blue;
+    let num = Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD);
+
     let menu_text = vec![
         Line::from(""),
+        Line::from(vec![Span::styled("  1. ", num), Span::raw("Copy last 100 lines")]),
+        Line::from(vec![Span::styled("  2. ", num), Span::raw("Copy last 500 lines")]),
+        Line::from(vec![Span::styled("  3. ", num), Span::raw("Copy visible content")]),
+        Line::from(vec![Span::styled("  4. ", num), Span::raw("Copy from current position")]),
+        Line::from(vec![Span::styled("  5. ", num), Span::raw("Copy all logs")]),
         Line::from(vec![
-            Span::styled("  1. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Copy last 100 lines"),
+            Span::styled("  6. ", num),
+            Span::styled("Export all logs to file", Style::default().fg(Color::LightGreen).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
-            Span::styled("  2. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Copy last 500 lines"),
-        ]),
-        Line::from(vec![
-            Span::styled("  3. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Copy visible content"),
-        ]),
-        Line::from(vec![
-            Span::styled("  4. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Copy from current position"),
-        ]),
-        Line::from(vec![
-            Span::styled("  5. ", Style::default().fg(Color::Yellow)),
-            Span::raw("Copy all logs"),
+            Span::styled("  7. ", num),
+            Span::styled("Print to terminal (manual copy / SSH)", Style::default().fg(Color::LightCyan).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(""),
         Line::from(Span::styled("  ESC to close", Style::default().fg(Color::Gray))),
     ];
 
-    let menu_width = 35;
-    let menu_height = 11;
+    let menu_width = 44;
+    let menu_height = 13;
     let menu_area = centered_rect(menu_width, menu_height, area);
 
+    // Wipe whatever is behind the menu so the background is fully opaque.
+    frame.render_widget(Clear, menu_area);
+
     let menu = Paragraph::new(menu_text)
+        .style(Style::default().bg(bg).fg(Color::White))
         .block(Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan))
+            .border_style(Style::default().fg(Color::White).bg(bg).add_modifier(Modifier::BOLD))
             .title(" Clipboard ")
-            .style(Style::default().bg(Color::DarkGray)));
+            .title_style(Style::default().fg(Color::White).bg(bg).add_modifier(Modifier::BOLD))
+            .style(Style::default().bg(bg)));
 
     frame.render_widget(menu, menu_area);
 }
@@ -576,52 +661,4 @@ fn render_loading_overlay(frame: &mut Frame, area: Rect, message: &str) {
         .alignment(Alignment::Center);
 
     frame.render_widget(loading_box, overlay_area);
-}
-
-/// Render loading screen during transitions (v3.3.0)
-/// Shows a centered loading box with the given message
-/// NOTE: This function is kept for backwards compatibility but is no longer used
-/// in favor of render_loading_overlay which shows loading only in the panel area
-#[allow(dead_code)]
-pub fn render_loading_screen(frame: &mut Frame, message: &str) {
-    use ratatui::widgets::Clear;
-    let size = frame.area();
-
-    // Clear entire screen first to prevent ghost characters
-    frame.render_widget(Clear, size);
-
-    // Calculate centered position
-    let loading_width = 50u16;
-    let loading_height = 7u16;
-    let x = (size.width.saturating_sub(loading_width)) / 2;
-    let y = (size.height.saturating_sub(loading_height)) / 2;
-
-    let loading_area = Rect {
-        x: size.x + x,
-        y: size.y + y,
-        width: loading_width.min(size.width),
-        height: loading_height.min(size.height),
-    };
-
-    let loading_text = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Loading  ",
-            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(Span::styled(message, Style::default().fg(Color::White))),
-        Line::from(""),
-        Line::from(Span::styled("  Please wait...", Style::default().fg(Color::Gray))),
-    ];
-
-    let loading_box = Paragraph::new(loading_text)
-        .block(Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::Cyan))
-            .title(" Loading ")
-            .style(Style::default().bg(Color::DarkGray)))
-        .alignment(Alignment::Center);
-
-    frame.render_widget(loading_box, loading_area);
 }
