@@ -149,7 +149,7 @@ fn render_header(frame: &mut Frame, area: Rect, state: &AppState) {
     let header_text = vec![
         Line::from(vec![
             Span::styled(
-                format!("Docker Manager v{}", env!("CARGO_PKG_VERSION")),
+                format!("Dockpit v{}", env!("CARGO_PKG_VERSION")),
                 Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
             ),
             Span::raw(" | "),

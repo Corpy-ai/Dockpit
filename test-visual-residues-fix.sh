@@ -4,19 +4,19 @@
 # Verifica que NO aparezcan residuos visuales en transiciones
 
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║  Docker Manager v3.0.2 - Visual Residues Fix Test Suite     ║"
+echo "║  Dockpit v3.0.2 - Visual Residues Fix Test Suite     ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
 # Verificar que el binario existe
-if [ ! -f "./target/release/docker-manager" ]; then
-    echo "❌ ERROR: Binario no encontrado en ./target/release/docker-manager"
+if [ ! -f "./target/release/dockpit" ]; then
+    echo "❌ ERROR: Binario no encontrado en ./target/release/dockpit"
     echo "Ejecuta: cargo build --release"
     exit 1
 fi
 
 # Verificar versión
-VERSION=$(./target/release/docker-manager --version)
+VERSION=$(./target/release/dockpit --version)
 echo "✅ Versión detectada: $VERSION"
 echo ""
 
@@ -33,7 +33,7 @@ echo ""
 echo "📋 Test 1: Logs ↔ Stats Rápido (CRÍTICO)"
 echo "────────────────────────────────────────"
 echo "PASOS:"
-echo "  1. Ejecutar: ./target/release/docker-manager"
+echo "  1. Ejecutar: ./target/release/dockpit"
 echo "  2. Presionar L (switch to logs)"
 echo "  3. Presionar S (switch to stats)"
 echo "  4. Presionar L (volver a logs)"
@@ -56,7 +56,7 @@ echo ""
 echo "📋 Test 2: Expand/Collapse Logs (CRÍTICO)"
 echo "──────────────────────────────────────────"
 echo "PASOS:"
-echo "  1. Ejecutar: ./target/release/docker-manager"
+echo "  1. Ejecutar: ./target/release/dockpit"
 echo "  2. Presionar L (switch to logs)"
 echo "  3. Presionar F (expand logs - full screen)"
 echo "  4. Presionar F (collapse logs - dual panel)"
@@ -79,7 +79,7 @@ echo ""
 echo "📋 Test 3: Secuencia Compleja Mixta"
 echo "────────────────────────────────────"
 echo "PASOS:"
-echo "  1. Ejecutar: ./target/release/docker-manager"
+echo "  1. Ejecutar: ./target/release/dockpit"
 echo "  2. Secuencia rápida sin pausas:"
 echo "     L → S → L → F → F → S → L → F → S → L"
 echo "  3. Observar TODAS las transiciones"
@@ -98,7 +98,7 @@ echo ""
 echo "📋 Test 4: Container Switch + View Switch"
 echo "──────────────────────────────────────────"
 echo "PASOS (requiere 3+ containers):"
-echo "  1. Ejecutar: ./target/release/docker-manager"
+echo "  1. Ejecutar: ./target/release/dockpit"
 echo "  2. Secuencia:"
 echo "     ↓ (container 2) → S (stats) → ↓ (container 3)"
 echo "     → L (logs) → F (expand) → ↑ (container 2)"
@@ -120,7 +120,7 @@ echo ""
 echo "📋 Test 5: High-Frequency Logs + Switching"
 echo "───────────────────────────────────────────"
 echo "PASOS (requiere container con logs activos):"
-echo "  1. Ejecutar: ./target/release/docker-manager"
+echo "  1. Ejecutar: ./target/release/dockpit"
 echo "  2. Seleccionar container con logs frecuentes"
 echo "  3. Secuencia rápida múltiples veces:"
 echo "     L → S → L → F → F → S"
@@ -210,7 +210,7 @@ echo "════════════════════════�
 echo ""
 
 echo "💡 PARA EJECUTAR DOCKER MANAGER:"
-echo "   ./target/release/docker-manager"
+echo "   ./target/release/dockpit"
 echo ""
 echo "📚 DOCUMENTACIÓN:"
 echo "   - VISUAL_RESIDUES_FIX.md - Detalles técnicos completos"

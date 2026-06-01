@@ -1,4 +1,4 @@
-# Docker Manager v3.0.1 - Verification Checklist
+# Dockpit v3.0.1 - Verification Checklist
 
 ## ✅ Version Consistency
 - [x] Cargo.toml: 3.0.1

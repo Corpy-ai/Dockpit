@@ -1,14 +1,14 @@
 #!/bin/bash
 
-# Docker Manager v3.0 - Local Installation Script
-# Instala Docker Manager en el directorio local del usuario
+# Dockpit v3.0 - Local Installation Script
+# Instala Dockpit en el directorio local del usuario
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BINARY_PATH="$SCRIPT_DIR/target/release/docker-manager"
+BINARY_PATH="$SCRIPT_DIR/target/release/dockpit"
 INSTALL_DIR="$HOME/.local/bin"
-INSTALL_PATH="$INSTALL_DIR/docker-manager"
+INSTALL_PATH="$INSTALL_DIR/dockpit"
 
-echo "🔧 Docker Manager v3.0 - Local Installation"
+echo "🔧 Dockpit v3.0 - Local Installation"
 echo "============================================="
 
 # Crear directorio si no existe
@@ -28,11 +28,11 @@ chmod +x "$INSTALL_PATH"
 
 # Verificar instalación
 if [ -f "$INSTALL_PATH" ]; then
-    echo "✅ Docker Manager v3.0 installed successfully!"
+    echo "✅ Dockpit v3.0 installed successfully!"
     echo ""
     echo "📝 Usage:"
-    echo "   docker-manager           # Run from anywhere"
-    echo "   ~/.local/bin/docker-manager  # Full path"
+    echo "   dockpit           # Run from anywhere"
+    echo "   ~/.local/bin/dockpit  # Full path"
     echo ""
     echo "⚠️  Make sure ~/.local/bin is in your PATH:"
     echo "   export PATH=\"\$HOME/.local/bin:\$PATH\""

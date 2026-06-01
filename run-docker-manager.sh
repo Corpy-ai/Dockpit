@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Docker Manager v3.0 - Launcher Script
-# Ejecuta el Docker Manager optimizado desde el directorio local
+# Dockpit v3.0 - Launcher Script
+# Ejecuta el Dockpit optimizado desde el directorio local
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BINARY_PATH="$SCRIPT_DIR/target/release/docker-manager"
+BINARY_PATH="$SCRIPT_DIR/target/release/dockpit"
 
 # Verificar que el binario existe
 if [ ! -f "$BINARY_PATH" ]; then
@@ -20,8 +20,8 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
-# Ejecutar Docker Manager
-echo "🚀 Starting Docker Manager v3.0..."
+# Ejecutar Dockpit
+echo "🚀 Starting Dockpit v3.0..."
 echo "📍 Binary: $BINARY_PATH"
 echo ""
 

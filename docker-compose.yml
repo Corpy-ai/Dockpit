@@ -1,10 +1,10 @@
 version: '3.8'
 
 services:
-  docker-manager:
+  dockpit:
     build: .
-    image: unicommerce/docker-manager:3.0.0
-    container_name: docker-manager
+    image: corpy-ai/dockpit:3.3.0
+    container_name: dockpit
     tty: true
     stdin_open: true
     volumes:
@@ -16,7 +16,7 @@ services:
       - TERM=xterm-256color
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
-      - docker-manager-net
+      - dockpit-net
     restart: unless-stopped
     
     # Resource limits (optional)
@@ -30,17 +30,17 @@ services:
           cpus: '0.1'
 
 networks:
-  docker-manager-net:
+  dockpit-net:
     driver: bridge
 
 # Alternative service for development
-  docker-manager-dev:
+  dockpit-dev:
     profiles: ["dev"]
     build:
       context: .
       dockerfile: Dockerfile
-    image: unicommerce/docker-manager:dev
-    container_name: docker-manager-dev
+    image: corpy-ai/dockpit:dev
+    container_name: dockpit-dev
     tty: true
     stdin_open: true
     volumes:
@@ -53,4 +53,4 @@ networks:
       - TERM=xterm-256color
       - RUST_LOG=debug
     networks:
-      - docker-manager-net
+      - dockpit-net

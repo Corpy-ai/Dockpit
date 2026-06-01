@@ -26,7 +26,7 @@ pub async fn run_ui(docker_manager: DockerManager) -> Result<(), Box<dyn Error +
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    let title = format!("Docker Manager v{}", env!("CARGO_PKG_VERSION"));
+    let title = format!("Dockpit v{}", env!("CARGO_PKG_VERSION"));
     // NOTE: we deliberately do NOT enable mouse capture. Mouse events are never
     // consumed by the app, and capturing them only disables the terminal's own
     // click-drag text selection — which is the universal fallback for copying
@@ -240,14 +240,14 @@ enum ClipboardBackend {
 
 /// Pick the clipboard backend once at startup.
 ///
-/// - Explicit `DOCKER_MANAGER_CLIPBOARD=osc52|local` always wins.
+/// - Explicit `DOCKPIT_CLIPBOARD=osc52|local` always wins.
 /// - Over SSH only OSC 52 reaches the user's (client) clipboard.
 /// - A local graphical session uses the native clipboard (persists via a
 ///   clipboard manager / CLI tools).
 /// - A local TTY / headless session falls back to OSC 52 (native clipboard
 ///   isn't reachable, but the terminal is).
 fn detect_clipboard_backend() -> ClipboardBackend {
-    if let Some(v) = std::env::var_os("DOCKER_MANAGER_CLIPBOARD") {
+    if let Some(v) = std::env::var_os("DOCKPIT_CLIPBOARD") {
         match v.to_string_lossy().to_ascii_lowercase().as_str() {
             "osc52" | "osc" => return ClipboardBackend::Osc52,
             "local" | "native" => return ClipboardBackend::Local,
@@ -296,7 +296,7 @@ fn print_for_manual_copy(
         writeln!(out, "{content}")?;
         writeln!(
             out,
-            "\n===== fin ({lines} líneas) — Enter para volver a docker-manager ====="
+            "\n===== fin ({lines} líneas) — Enter para volver a dockpit ====="
         )?;
         out.flush()?;
     }

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Docker Manager v3.0 Container Runner
-# Easy way to run Docker Manager in a container
+# Dockpit v3.0 Container Runner
+# Easy way to run Dockpit in a container
 
 set -e
 
@@ -13,8 +13,8 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-IMAGE_NAME="unicommerce/docker-manager:3.0.0"
-CONTAINER_NAME="docker-manager"
+IMAGE_NAME="corpy-ai/dockpit:3.3.0"
+CONTAINER_NAME="dockpit"
 
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -35,7 +35,7 @@ print_error() {
 print_header() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════════╗"
-    echo "║                   Docker Manager Container Runner                ║"
+    echo "║                   Dockpit Container Runner                ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -51,7 +51,7 @@ check_docker() {
 
 # Build the image
 build_image() {
-    print_info "Building Docker Manager image..."
+    print_info "Building Dockpit image..."
     
     if docker build -t "$IMAGE_NAME" .; then
         print_success "Image built successfully: $IMAGE_NAME"
@@ -63,7 +63,7 @@ build_image() {
 
 # Run the container
 run_container() {
-    print_info "Starting Docker Manager container..."
+    print_info "Starting Dockpit container..."
     
     # Stop and remove existing container if it exists
     if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
@@ -83,23 +83,23 @@ run_container() {
 
 # Run with docker-compose
 run_compose() {
-    print_info "Starting Docker Manager with docker-compose..."
+    print_info "Starting Dockpit with docker-compose..."
     
     if [[ ! -f "docker-compose.yml" ]]; then
         print_error "docker-compose.yml not found"
         exit 1
     fi
     
-    docker-compose up --build -d docker-manager
+    docker-compose up --build -d dockpit
     
     print_success "Container started in detached mode"
-    print_info "To connect: docker exec -it docker-manager docker-manager"
+    print_info "To connect: docker exec -it dockpit dockpit"
     print_info "To stop: docker-compose down"
 }
 
 # Show usage
 show_usage() {
-    echo "Docker Manager Container Runner"
+    echo "Dockpit Container Runner"
     echo ""
     echo "Usage: $0 [COMMAND]"
     echo ""
@@ -123,7 +123,7 @@ show_usage() {
 
 # Stop container
 stop_container() {
-    print_info "Stopping Docker Manager container..."
+    print_info "Stopping Dockpit container..."
     
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         docker stop "$CONTAINER_NAME"
@@ -135,7 +135,7 @@ stop_container() {
 
 # Show logs
 show_logs() {
-    print_info "Showing Docker Manager logs..."
+    print_info "Showing Dockpit logs..."
     
     if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         docker logs -f "$CONTAINER_NAME"
@@ -146,7 +146,7 @@ show_logs() {
 
 # Open shell
 open_shell() {
-    print_info "Opening shell in Docker Manager container..."
+    print_info "Opening shell in Dockpit container..."
     
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         docker exec -it "$CONTAINER_NAME" /bin/sh
@@ -158,7 +158,7 @@ open_shell() {
 
 # Clean up
 clean_up() {
-    print_info "Cleaning up Docker Manager containers and images..."
+    print_info "Cleaning up Dockpit containers and images..."
     
     # Stop and remove container
     if docker ps -a --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then

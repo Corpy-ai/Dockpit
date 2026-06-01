@@ -478,7 +478,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "docker-manager"
+name = "dockpit"
 version = "3.3.0"
 dependencies = [
  "anyhow",

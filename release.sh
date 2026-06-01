@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Docker Manager v3.0 Release Builder
+# Dockpit v3.0 Release Builder
 # Complete release pipeline for all distribution methods
 
 set -e
@@ -14,8 +14,8 @@ CYAN='\033[0;36m'
 MAGENTA='\033[0;35m'
 NC='\033[0m'
 
-VERSION="3.0.0"
-APP_NAME="docker-manager"
+VERSION="3.3.0"
+APP_NAME="dockpit"
 
 print_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -41,7 +41,7 @@ print_header() {
     echo -e "${CYAN}"
     cat << 'EOF'
 ╔══════════════════════════════════════════════════════════════════════╗
-║                     Docker Manager v3.0 Release Builder             ║
+║                     Dockpit v3.0 Release Builder             ║
 ║                           Complete Pipeline                          ║
 ╚══════════════════════════════════════════════════════════════════════╝
 EOF
@@ -140,9 +140,9 @@ build_docker() {
     
     if command -v docker &> /dev/null; then
         if [[ -f "Dockerfile" ]]; then
-            docker build -t "unicommerce/$APP_NAME:$VERSION" .
-            docker tag "unicommerce/$APP_NAME:$VERSION" "unicommerce/$APP_NAME:latest"
-            print_success "Docker image built: unicommerce/$APP_NAME:$VERSION"
+            docker build -t "corpy-ai/$APP_NAME:$VERSION" .
+            docker tag "corpy-ai/$APP_NAME:$VERSION" "corpy-ai/$APP_NAME:latest"
+            print_success "Docker image built: corpy-ai/$APP_NAME:$VERSION"
         else
             print_error "Dockerfile not found"
         fi
@@ -167,7 +167,7 @@ create_documentation() {
     print_step "Creating release documentation..."
     
     cat > "RELEASE_NOTES.md" << EOF
-# Docker Manager v$VERSION Release Notes
+# Dockpit v$VERSION Release Notes
 
 ## 🎉 What's New
 
@@ -197,7 +197,7 @@ create_documentation() {
 - **macOS Intel/ARM**: Universal macOS support
 
 ### Container Distribution
-- **Docker Image**: \`unicommerce/docker-manager:$VERSION\`
+- **Docker Image**: \`corpy-ai/dockpit:$VERSION\`
 - **Minimal Size**: Alpine-based, ~25MB total
 - **Secure**: Non-root user, readonly Docker socket
 
@@ -211,7 +211,7 @@ create_documentation() {
 ### Native Installation
 \`\`\`bash
 # Download and run universal installer
-curl -sSL https://raw.githubusercontent.com/unicommerce/docker-manager/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Corpy-ai/dockpit/main/install.sh | bash
 
 # Or install locally
 ./install-universal.sh
@@ -220,10 +220,10 @@ curl -sSL https://raw.githubusercontent.com/unicommerce/docker-manager/main/inst
 ### Docker Usage
 \`\`\`bash
 # Run directly
-docker run -it --rm -v /var/run/docker.sock:/var/run/docker.sock unicommerce/docker-manager:$VERSION
+docker run -it --rm -v /var/run/docker.sock:/var/run/docker.sock corpy-ai/dockpit:$VERSION
 
 # Or with docker-compose
-docker-compose up docker-manager
+docker-compose up dockpit
 \`\`\`
 
 ## 🎯 Key Controls
@@ -272,7 +272,7 @@ create_packages() {
     
     if [[ -d "dist" ]]; then
         # Create versioned directory
-        local release_dir="docker-manager-v$VERSION"
+        local release_dir="dockpit-v$VERSION"
         mkdir -p "$release_dir"
         
         # Copy distribution files
@@ -320,8 +320,8 @@ show_summary() {
     fi
     
     # Show Docker image
-    if command -v docker &> /dev/null && docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "unicommerce/$APP_NAME:$VERSION"; then
-        local image_size=$(docker images --format 'table {{.Size}}' "unicommerce/$APP_NAME:$VERSION" | tail -1)
+    if command -v docker &> /dev/null && docker images --format '{{.Repository}}:{{.Tag}}' | grep -q "corpy-ai/$APP_NAME:$VERSION"; then
+        local image_size=$(docker images --format 'table {{.Size}}' "corpy-ai/$APP_NAME:$VERSION" | tail -1)
         print_success "Docker image: $image_size"
     fi
     
@@ -333,7 +333,7 @@ show_summary() {
     
     # Show archives
     for ext in tar.gz zip; do
-        local archive="docker-manager-v$VERSION.$ext"
+        local archive="dockpit-v$VERSION.$ext"
         if [[ -f "$archive" ]]; then
             local archive_size=$(du -h "$archive" | cut -f1)
             print_success "Release archive: $archive ($archive_size)"
@@ -355,7 +355,7 @@ show_summary() {
 main() {
     print_header
     
-    print_info "Starting release pipeline for Docker Manager v$VERSION"
+    print_info "Starting release pipeline for Dockpit v$VERSION"
     echo ""
     
     check_prerequisites
@@ -390,7 +390,7 @@ case "${1:-release}" in
         run_tests
         ;;
     "--help"|"-h"|"help")
-        echo "Docker Manager Release Builder"
+        echo "Dockpit Release Builder"
         echo ""
         echo "Usage: $0 [COMMAND]"
         echo ""

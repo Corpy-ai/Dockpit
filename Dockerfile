@@ -1,4 +1,4 @@
-# Docker Manager v3.0 Container Image
+# Dockpit v3.0 Container Image
 # Multi-stage build for minimal final image
 
 # Build stage
@@ -34,7 +34,7 @@ COPY src ./src
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
 # Strip binary for smaller size
-RUN strip target/x86_64-unknown-linux-musl/release/docker-manager
+RUN strip target/x86_64-unknown-linux-musl/release/dockpit
 
 # Runtime stage - minimal Alpine image
 FROM alpine:3.19 AS runtime
@@ -51,11 +51,11 @@ RUN addgroup -g 1000 dockermgr && \
     adduser -D -s /bin/sh -u 1000 -G dockermgr dockermgr
 
 # Copy binary from builder
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/docker-manager /usr/local/bin/docker-manager
+COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/dockpit /usr/local/bin/dockpit
 
 # Set ownership and permissions
-RUN chown dockermgr:dockermgr /usr/local/bin/docker-manager && \
-    chmod +x /usr/local/bin/docker-manager
+RUN chown dockermgr:dockermgr /usr/local/bin/dockpit && \
+    chmod +x /usr/local/bin/dockpit
 
 # Switch to non-root user
 USER dockermgr
@@ -69,13 +69,13 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD docker version >/dev/null || exit 1
 
 # Default command
-ENTRYPOINT ["/usr/local/bin/docker-manager"]
+ENTRYPOINT ["/usr/local/bin/dockpit"]
 CMD []
 
 # Metadata
-LABEL org.opencontainers.image.title="Docker Manager" \
+LABEL org.opencontainers.image.title="Dockpit" \
       org.opencontainers.image.description="Fast and efficient Docker container management TUI" \
-      org.opencontainers.image.version="3.0.0" \
-      org.opencontainers.image.source="https://github.com/unicommerce/docker-manager" \
+      org.opencontainers.image.version="3.3.0" \
+      org.opencontainers.image.source="https://github.com/Corpy-ai/dockpit" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.authors="uniCommerce Team"
+      org.opencontainers.image.authors="Corpy"

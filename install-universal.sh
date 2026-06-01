@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Docker Manager v3.0 Universal Installer
+# Dockpit v3.0 Universal Installer
 # Compatible with Linux, macOS, and WSL
-# Author: uniCommerce Team
+# Author: Corpy
 
 set -e
 
@@ -15,10 +15,10 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Configuration
-APP_NAME="docker-manager"
+APP_NAME="dockpit"
 APP_VERSION="3.0.0"
 INSTALL_DIR="/usr/local/bin"
-BINARY_PATH="./target/release/docker-manager"
+BINARY_PATH="./target/release/dockpit"
 
 # Print colored messages
 print_info() {
@@ -40,7 +40,7 @@ print_error() {
 print_header() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════════╗"
-    echo "║                    Docker Manager v3.0 Installer                ║"
+    echo "║                    Dockpit v3.0 Installer                ║"
     echo "║                     Universal Installation                       ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -124,7 +124,7 @@ check_dependencies() {
 
 # Install the binary
 install_binary() {
-    print_info "Installing Docker Manager..."
+    print_info "Installing Dockpit..."
     
     if [[ ! -f "$BINARY_PATH" ]]; then
         print_error "Binary not found at $BINARY_PATH"
@@ -147,14 +147,14 @@ create_desktop_entry() {
         DESKTOP_DIR="$HOME/.local/share/applications"
         mkdir -p "$DESKTOP_DIR"
         
-        cat > "$DESKTOP_DIR/docker-manager.desktop" << EOF
+        cat > "$DESKTOP_DIR/dockpit.desktop" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Docker Manager
+Name=Dockpit
 Comment=Fast and efficient Docker container management
 Icon=application-x-executable
-Exec=gnome-terminal -- docker-manager
+Exec=gnome-terminal -- dockpit
 Categories=Development;System;
 Terminal=true
 StartupNotify=false
@@ -173,10 +173,10 @@ test_installation() {
     print_info "Testing installation..."
     
     if command -v "$APP_NAME" &> /dev/null; then
-        VERSION_OUTPUT=$("$APP_NAME" --version 2>/dev/null || echo "Docker Manager v3.0.0")
+        VERSION_OUTPUT=$("$APP_NAME" --version 2>/dev/null || echo "Dockpit v3.0.0")
         print_success "Installation successful!"
         print_info "Version: $VERSION_OUTPUT"
-        print_info "Run '$APP_NAME' to start the Docker Manager"
+        print_info "Run '$APP_NAME' to start the Dockpit"
     else
         print_error "Installation failed - command not found in PATH"
         print_info "Try running: $INSTALL_DIR/$APP_NAME"
@@ -186,7 +186,7 @@ test_installation() {
 
 # Uninstall function
 uninstall() {
-    print_info "Uninstalling Docker Manager..."
+    print_info "Uninstalling Dockpit..."
     
     # Remove binary
     if [[ -f "$INSTALL_DIR/$APP_NAME" ]]; then
@@ -195,23 +195,23 @@ uninstall() {
     fi
     
     # Remove desktop entry
-    if [[ -f "$HOME/.local/share/applications/docker-manager.desktop" ]]; then
-        rm "$HOME/.local/share/applications/docker-manager.desktop"
+    if [[ -f "$HOME/.local/share/applications/dockpit.desktop" ]]; then
+        rm "$HOME/.local/share/applications/dockpit.desktop"
         print_success "Desktop entry removed"
     fi
     
-    print_success "Docker Manager uninstalled successfully"
+    print_success "Dockpit uninstalled successfully"
 }
 
 # Show usage information
 show_usage() {
-    echo "Docker Manager v3.0 Universal Installer"
+    echo "Dockpit v3.0 Universal Installer"
     echo ""
     echo "Usage: $0 [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  install     Install Docker Manager (default)"
-    echo "  uninstall   Remove Docker Manager"
+    echo "  install     Install Dockpit (default)"
+    echo "  uninstall   Remove Dockpit"
     echo "  test        Test installation"
     echo "  --help      Show this help message"
     echo ""

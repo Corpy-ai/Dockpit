@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Docker Manager v3.0 - Installation Script
-# Author: uniCommerce Team
+# Dockpit v3.0 - Installation Script
+# Author: Corpy
 
 set -e
 
@@ -13,7 +13,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Variables
-BINARY_NAME="docker-manager"
+BINARY_NAME="dockpit"
 INSTALL_DIR="/usr/local/bin"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BINARY_PATH="$SOURCE_DIR/target/release/$BINARY_NAME"
@@ -21,7 +21,7 @@ BINARY_PATH="$SOURCE_DIR/target/release/$BINARY_NAME"
 # Functions
 print_header() {
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}       Docker Manager v3.0 - Rust Edition Installer${NC}"
+    echo -e "${BLUE}       Dockpit v3.0 - Rust Edition Installer${NC}"
     echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
     echo
 }
@@ -81,7 +81,7 @@ install_rust() {
 
 build_binary() {
     print_header
-    echo "Compilando Docker Manager v3.0..."
+    echo "Compilando Dockpit v3.0..."
     echo
     
     cd "$SOURCE_DIR"
@@ -107,7 +107,7 @@ build_binary() {
 
 install_binary() {
     print_header
-    echo "Instalando Docker Manager v3.0..."
+    echo "Instalando Dockpit v3.0..."
     echo
     
     # Check if we need sudo
@@ -136,7 +136,7 @@ install_binary() {
     
     # Verify installation
     if command -v $BINARY_NAME &> /dev/null; then
-        print_success "Docker Manager v3.0 instalado correctamente"
+        print_success "Dockpit v3.0 instalado correctamente"
     else
         print_warning "Instalación completa pero $BINARY_NAME no está en PATH"
         echo "  Añade $INSTALL_DIR a tu PATH si es necesario"
@@ -149,10 +149,10 @@ show_usage() {
     echo -e "${GREEN}¡Instalación completa!${NC}"
     echo
     echo "Uso:"
-    echo "  ${BLUE}docker-manager${NC}              # Iniciar modo TUI interactivo"
-    echo "  ${BLUE}docker-manager list${NC}        # Listar contenedores"
-    echo "  ${BLUE}docker-manager logs <name>${NC} # Ver logs de un contenedor"
-    echo "  ${BLUE}docker-manager --help${NC}      # Ver todas las opciones"
+    echo "  ${BLUE}dockpit${NC}              # Iniciar modo TUI interactivo"
+    echo "  ${BLUE}dockpit list${NC}        # Listar contenedores"
+    echo "  ${BLUE}dockpit logs <name>${NC} # Ver logs de un contenedor"
+    echo "  ${BLUE}dockpit --help${NC}      # Ver todas las opciones"
     echo
     echo "Atajos de teclado en modo TUI:"
     echo "  ${YELLOW}↑↓${NC} Navegar    ${YELLOW}L${NC} Logs    ${YELLOW}S${NC} Stats    ${YELLOW}F${NC} Fullscreen"

@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Test de Correcciones Visuales para Docker Manager v3.0.1
+# Test de Correcciones Visuales para Dockpit v3.0.1
 
 set -e
 
-echo "🎨 Docker Manager v3.0.1 - Test de Correcciones Visuales"
+echo "🎨 Dockpit v3.0.1 - Test de Correcciones Visuales"
 echo "========================================================="
 echo ""
 
@@ -15,8 +15,8 @@ CYAN='\033[0;36m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Check if docker-manager is built
-if [ ! -f "./target/release/docker-manager" ]; then
+# Check if dockpit is built
+if [ ! -f "./target/release/dockpit" ]; then
     echo -e "${YELLOW}⚠️  Ejecutable no encontrado. Compilando...${NC}"
     cargo build --release
     echo ""
@@ -26,7 +26,7 @@ echo "✅ Verificaciones previas:"
 echo ""
 
 # Check compilation timestamp
-BUILD_TIME=$(stat -c %y ./target/release/docker-manager | cut -d' ' -f1,2)
+BUILD_TIME=$(stat -c %y ./target/release/dockpit | cut -d' ' -f1,2)
 echo "📦 Última compilación: $BUILD_TIME"
 
 # Check Docker
@@ -47,7 +47,7 @@ echo ""
 echo "🔍 Test 1: Navegación entre Contenedores"
 echo "   Objetivo: Verificar que NO hay residuos visuales"
 echo "   Pasos:"
-echo "     1. Ejecutar: ./target/release/docker-manager"
+echo "     1. Ejecutar: ./target/release/dockpit"
 echo "     2. Presionar ↓ varias veces"
 echo "     3. Presionar ↑ varias veces"
 echo "   ✅ Esperado:"
@@ -155,7 +155,7 @@ echo "   │ [log data...] │  ← Pantalla LIMPIA ✅"
 echo ""
 
 echo "🚀 Ejecutar Test Interactivo:"
-echo "   ./target/release/docker-manager"
+echo "   ./target/release/dockpit"
 echo ""
 
 echo "📝 Después del Testing:"

@@ -1,1 +1,17 @@
+# Build artifacts
 /target
+/dist
+
+# Release output
+RELEASE_NOTES.md
+dockpit-v*/
+dockpit-v*.tar.gz
+dockpit-v*.zip
+
+# Runtime / local state
+.ultimo_contenedor_seleccionado_v2
+dockpit-*.txt
+
+# Editor / OS
+*.swp
+.DS_Store

@@ -11,10 +11,10 @@ use log::{error, info};
 use std::io::Write;
 
 #[derive(Parser)]
-#[command(name = "docker-manager")]
-#[command(author = "uniCommerce Team")]
+#[command(name = "dockpit")]
+#[command(author = "Corpy <hello@corpy.ai>")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
-#[command(about = "Fast and efficient Docker container manager with perfect visual interface - Zero glitches guaranteed", long_about = None)]
+#[command(about = "A fast, flicker-free terminal UI for managing Docker containers", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,
@@ -91,7 +91,7 @@ async fn main() -> Result<()> {
         })
         .init();
 
-    info!("Docker Manager v{} starting...", env!("CARGO_PKG_VERSION"));
+    info!("Dockpit v{} starting...", env!("CARGO_PKG_VERSION"));
 
     // Create Docker manager
     let docker_manager = match DockerManager::new().await {

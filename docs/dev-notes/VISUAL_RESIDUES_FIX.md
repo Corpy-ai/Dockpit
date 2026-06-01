@@ -247,7 +247,7 @@ Llama switch_to_logs_mode().await
 
 ### Test 1: Logs ↔ Stats Rápido
 ```bash
-1. Ejecutar docker-manager
+1. Ejecutar dockpit
 2. Presionar L (logs)
 3. Presionar S (stats)
 4. Presionar L (logs)
@@ -257,7 +257,7 @@ Llama switch_to_logs_mode().await
 
 ### Test 2: Expand/Collapse Rápido
 ```bash
-1. Ejecutar docker-manager
+1. Ejecutar dockpit
 2. Presionar L (logs)
 3. Presionar F (expand)
 4. Presionar F (collapse)
@@ -267,7 +267,7 @@ Llama switch_to_logs_mode().await
 
 ### Test 3: Combinación Compleja
 ```bash
-1. Ejecutar docker-manager
+1. Ejecutar dockpit
 2. Secuencia: L → S → L → F → F → S → L → F
 3. Todo rápido sin pausas
 ✅ ESPERADO: Todas las transiciones limpias
@@ -275,7 +275,7 @@ Llama switch_to_logs_mode().await
 
 ### Test 4: Container Switch + View Switch
 ```bash
-1. Ejecutar docker-manager
+1. Ejecutar dockpit
 2. ↓ (siguiente container)
 3. S (stats)
 4. ↓ (siguiente container)

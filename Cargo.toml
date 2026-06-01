@@ -1,10 +1,15 @@
 [package]
-name = "docker-manager"
+name = "dockpit"
 version = "3.3.0"
 edition = "2021"
-authors = ["uniCommerce Team"]
-description = "Docker Container Manager - Elm Architecture, infinite scroll logs, zero flickering"
+authors = ["Corpy <hello@corpy.ai>"]
+description = "A fast, flicker-free terminal UI for managing Docker containers."
 license = "MIT"
+repository = "https://github.com/Corpy-ai/dockpit"
+homepage = "https://github.com/Corpy-ai/dockpit"
+readme = "README.md"
+keywords = ["docker", "tui", "containers", "devops", "ratatui"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 # TUI Framework
@@ -63,5 +68,5 @@ strip = true
 panic = "abort"
 
 [[bin]]
-name = "docker-manager"
+name = "dockpit"
 path = "src/main.rs"

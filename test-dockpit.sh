@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# Test script for Docker Manager v3.0
+# Test script for Dockpit v3.0
 
-echo "🧪 Testing Docker Manager v3.0"
+echo "🧪 Testing Dockpit v3.0"
 echo "=============================="
 echo
 
 # Check if binary exists
-if [ ! -f "target/release/docker-manager" ]; then
+if [ ! -f "target/release/dockpit" ]; then
     echo "❌ Binary not found. Please run: cargo build --release"
     exit 1
 fi
@@ -17,12 +17,12 @@ echo "✅ Binary found"
 # Test help command
 echo
 echo "📋 Testing help command..."
-./target/release/docker-manager --help
+./target/release/dockpit --help
 
 # Test list command
 echo
 echo "📋 Testing list command..."
-./target/release/docker-manager list
+./target/release/dockpit list
 
 # Instructions for interactive testing
 echo
@@ -30,7 +30,7 @@ echo "🎮 Interactive Testing"
 echo "====================="
 echo
 echo "Run the TUI mode with:"
-echo "  ./target/release/docker-manager"
+echo "  ./target/release/dockpit"
 echo
 echo "Test these key combinations:"
 echo "  1-9     : Jump to container N"

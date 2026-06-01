@@ -1,4 +1,4 @@
-# Docker Manager v3.0 - Optimizaciones Aplicadas
+# Dockpit v3.0 - Optimizaciones Aplicadas
 
 ## 🎯 Problemas Resueltos
 
@@ -83,17 +83,17 @@ tokio-util = "0.7"  # Task utilities y cancellation
 
 ### Compilar versión optimizada:
 ```bash
-cd docker-manager-rust
+cd dockpit-rust
 cargo build --release
 ```
 
 ### Ejecutar:
 ```bash
-./target/release/docker-manager
+./target/release/dockpit
 ```
 
 ### Verificar optimizaciones en tiempo real:
-1. Abrir docker-manager
+1. Abrir dockpit
 2. Observar uso de CPU/memoria del proceso
 3. Cambiar entre contenedores múltiples veces
 4. Dejar corriendo por 30+ minutos
@@ -137,4 +137,4 @@ cargo build --release
 
 **Versión**: 3.0.0-optimized
 **Fecha**: 2025-01-22
-**Autor**: uniCommerce Team
+**Autor**: Corpy

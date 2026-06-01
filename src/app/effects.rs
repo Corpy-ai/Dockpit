@@ -240,7 +240,7 @@ impl EffectRunner {
                 let tx = self.tx.clone();
                 let lines = content.lines().count();
                 let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
-                let filename = format!("docker-manager-{}-{}.txt", container_name, timestamp);
+                let filename = format!("dockpit-{}-{}.txt", container_name, timestamp);
                 match std::fs::write(&filename, content) {
                     Ok(_) => {
                         let _ = tx.try_send(Message::OperationSuccess(

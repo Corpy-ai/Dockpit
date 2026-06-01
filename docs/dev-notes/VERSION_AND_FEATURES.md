@@ -1,4 +1,4 @@
-# Docker Manager v3.0.4 - Version Management & New Features
+# Dockpit v3.0.4 - Version Management & New Features
 
 ## 🔧 Part 1: Centralized Version Management
 
@@ -6,8 +6,8 @@
 Previously, version was hardcoded in 3 different places:
 - `Cargo.toml: version = "3.0.3"`
 - `src/main.rs: #[command(version = "3.0.3")]`
-- `src/ui/app.rs: Span::styled("Docker Manager v3.0.3", ...)`
-- `src/ui/mod.rs: SetTitle("Docker Manager v3.0.3 - ...")`
+- `src/ui/app.rs: Span::styled("Dockpit v3.0.3", ...)`
+- `src/ui/mod.rs: SetTitle("Dockpit v3.0.3 - ...")`
 
 This meant updating version required changes in 4 files!
 
@@ -21,7 +21,7 @@ Using Rust's `env!("CARGO_PKG_VERSION")` macro to read version from `Cargo.toml`
 #[command(version = env!("CARGO_PKG_VERSION"))]
 
 // Runtime format! - builds string at runtime
-format!("Docker Manager v{}", env!("CARGO_PKG_VERSION"))
+format!("Dockpit v{}", env!("CARGO_PKG_VERSION"))
 ```
 
 The macro `env!("CARGO_PKG_VERSION")` is evaluated at **compile time**, not runtime, so there's zero performance impact.
@@ -38,14 +38,14 @@ version = "3.0.5"  # Change here only
 cargo build --release
 
 # Version automatically appears everywhere:
-./target/release/docker-manager --version
-# Output: docker-manager 3.0.5
+./target/release/dockpit --version
+# Output: dockpit 3.0.5
 
 # In UI header:
-# Docker Manager v3.0.5 | 33 containers | 23:47
+# Dockpit v3.0.5 | 33 containers | 23:47
 
 # In window title:
-# Docker Manager v3.0.5 - Physical Terminal Clear
+# Dockpit v3.0.5 - Physical Terminal Clear
 ```
 
 #### Files Updated (v3.0.4)
@@ -58,7 +58,7 @@ cargo build --release
 **`src/ui/app.rs` line 898-901:**
 ```rust
 Span::styled(
-    format!("Docker Manager v{}", env!("CARGO_PKG_VERSION")),
+    format!("Dockpit v{}", env!("CARGO_PKG_VERSION")),
     Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
 ),
 ```
@@ -66,7 +66,7 @@ Span::styled(
 **`src/ui/mod.rs` line 28-34:**
 ```rust
 let title = format!(
-    "Docker Manager v{} - Physical Terminal Clear",
+    "Dockpit v{} - Physical Terminal Clear",
     env!("CARGO_PKG_VERSION")
 );
 execute!(
@@ -317,7 +317,7 @@ When complete:
 ## 🧪 Testing Checklist
 
 - [x] Compile successfully with `cargo build --release`
-- [x] Version shows correctly: `./target/release/docker-manager --version`
+- [x] Version shows correctly: `./target/release/dockpit --version`
 - [ ] Version shows in UI header when running
 - [ ] Custom clipboard input works (press `C` → `7` → type number)
 - [ ] Loading indicator appears at top when scrolling (v3.0.5)

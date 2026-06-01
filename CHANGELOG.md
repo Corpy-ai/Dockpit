@@ -1,17 +1,17 @@
 # Changelog
 
-All notable changes to Docker Manager will be documented in this file.
+All notable changes to Dockpit will be documented in this file.
 
 ## [3.3.0] - 2026-05-31
 
 ### ✨ Added - New Functionality
 - **In-log search (`/`)**: Type a query, press Enter to jump to the first match, `n`/`N` to cycle matches. Matches are highlighted inline; `Esc` cancels. ASCII case-insensitive.
 - **Log-level filter (`Tab`)**: Cycle the visible level All → Error → Warn → Info → Debug → Trace → All. Scroll, scrollbar and the panel title all respect the filter.
-- **Export logs to file (Clipboard menu → `6`)**: Writes the full log to `docker-manager-<container>-<timestamp>.txt` and notifies the resulting path.
+- **Export logs to file (Clipboard menu → `6`)**: Writes the full log to `dockpit-<container>-<timestamp>.txt` and notifies the resulting path.
 - **Adaptive refresh cadence**: After ~5s idle the tick slows from 250ms→1000ms and container refresh from 2s→5s, cutting idle CPU/wakeups. Input latency is unaffected (keyboard is still polled instantly).
 
 ### 📋 Clipboard & remote copy (SSH)
-- **OSC 52 clipboard over SSH**: Clipboard menu options `1–6` now emit an OSC 52 escape sequence when running over SSH (or a local TTY), so the *local* terminal writes the copied text to the user's clipboard — no `xclip`/X11 needed on the remote host. Backend is auto-selected (SSH → OSC 52; local graphical → native clipboard; TTY/headless → OSC 52) and overridable with `DOCKER_MANAGER_CLIPBOARD=osc52|local`. tmux/screen passthrough wrapping is auto-applied. Hand-rolled base64 (no new dependency); ~100 KB payload guard.
+- **OSC 52 clipboard over SSH**: Clipboard menu options `1–6` now emit an OSC 52 escape sequence when running over SSH (or a local TTY), so the *local* terminal writes the copied text to the user's clipboard — no `xclip`/X11 needed on the remote host. Backend is auto-selected (SSH → OSC 52; local graphical → native clipboard; TTY/headless → OSC 52) and overridable with `DOCKPIT_CLIPBOARD=osc52|local`. tmux/screen passthrough wrapping is auto-applied. Hand-rolled base64 (no new dependency); ~100 KB payload guard.
 - **Clipboard menu option `7` — "Print to terminal (manual copy)"**: Dumps the loaded (filtered) logs to the terminal's normal scrollback so they can be selected with the mouse + `Ctrl+Shift+C`. This is the universal fallback that works on **any** terminal over SSH, including **GNOME Terminal / VTE, which does not support OSC 52** ([VTE #2495](https://gitlab.gnome.org/GNOME/vte/-/issues/2495)).
 - **Native mouse selection enabled**: Mouse capture was being requested but no mouse events were ever consumed — it only disabled the terminal's own click-drag selection. Removed it, so native text selection + `Ctrl+Shift+C` works in any terminal.
 - **Clipboard persistence after exit (local)**: The local backend now prefers the CLI tools (`wl-copy`/`xclip`/`xsel`/`pbcopy`/`clip.exe`), which daemonize and keep the selection after the TUI exits, falling back to `arboard`. Added `wl-copy` (Wayland) to the list.
@@ -336,6 +336,6 @@ The previous implementation only cleaned buffers when switching containers (↑/
 
 ## Links
 
-- [Repository](https://github.com/unicommerce/docker-manager-rust)
-- [Issues](https://github.com/unicommerce/docker-manager-rust/issues)
+- [Repository](https://github.com/Corpy-ai/dockpit)
+- [Issues](https://github.com/Corpy-ai/dockpit/issues)
 - [Documentation](./README.md)

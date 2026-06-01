@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Docker Manager v3.0 Cross-Platform Builder
+# Dockpit v3.0 Cross-Platform Builder
 # Builds binaries for multiple platforms
-# Author: uniCommerce Team
+# Author: Corpy
 
 set -e
 
@@ -14,7 +14,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-APP_NAME="docker-manager"
+APP_NAME="dockpit"
 VERSION="3.0.0"
 DIST_DIR="dist"
 
@@ -37,7 +37,7 @@ print_error() {
 print_header() {
     echo -e "${CYAN}"
     echo "╔══════════════════════════════════════════════════════════════════╗"
-    echo "║               Docker Manager v3.0 Cross-Platform Builder        ║"
+    echo "║               Dockpit v3.0 Cross-Platform Builder        ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -129,7 +129,7 @@ create_platform_readme() {
     local output_dir=$2
     
     cat > "$output_dir/README.md" << EOF
-# Docker Manager v${VERSION} - ${platform}
+# Dockpit v${VERSION} - ${platform}
 
 Fast, efficient Docker container management with modern TUI interface.
 
@@ -152,15 +152,15 @@ EOF
         echo "- \`install.bat\` - Windows installer" >> "$output_dir/README.md"
         echo "" >> "$output_dir/README.md"
         echo "### Manual Installation" >> "$output_dir/README.md"
-        echo "1. Copy \`docker-manager.exe\` to a directory in your PATH" >> "$output_dir/README.md"
-        echo "2. Run from Command Prompt or PowerShell: \`docker-manager\`" >> "$output_dir/README.md"
+        echo "1. Copy \`dockpit.exe\` to a directory in your PATH" >> "$output_dir/README.md"
+        echo "2. Run from Command Prompt or PowerShell: \`dockpit\`" >> "$output_dir/README.md"
     else
         echo "- \`./install.sh\` - Automatic installation" >> "$output_dir/README.md"
         echo "" >> "$output_dir/README.md"
         echo "### Manual Installation" >> "$output_dir/README.md"
-        echo "1. Copy \`docker-manager\` to \`/usr/local/bin/\` or \`~/.local/bin/\`" >> "$output_dir/README.md"
-        echo "2. Make executable: \`chmod +x docker-manager\`" >> "$output_dir/README.md"
-        echo "3. Run: \`docker-manager\`" >> "$output_dir/README.md"
+        echo "1. Copy \`dockpit\` to \`/usr/local/bin/\` or \`~/.local/bin/\`" >> "$output_dir/README.md"
+        echo "2. Make executable: \`chmod +x dockpit\`" >> "$output_dir/README.md"
+        echo "3. Run: \`dockpit\`" >> "$output_dir/README.md"
     fi
 
     cat >> "$output_dir/README.md" << EOF
@@ -182,7 +182,7 @@ EOF
 - Unix-like system (Linux, macOS, WSL)
 
 ## Support
-For issues and updates, visit: https://github.com/your-repo/docker-manager
+For issues and updates, visit: https://github.com/your-repo/dockpit
 
 Built with ❤️ using Rust and Ratatui
 EOF
@@ -197,7 +197,7 @@ create_platform_installer() {
         # Windows batch installer
         cat > "$output_dir/install.bat" << 'EOF'
 @echo off
-echo Docker Manager v3.0 Windows Installer
+echo Dockpit v3.0 Windows Installer
 echo.
 
 REM Check if running as administrator
@@ -206,7 +206,7 @@ if %errorLevel% == 0 (
     echo Installing system-wide...
     set INSTALL_DIR=%ProgramFiles%\DockerManager
     mkdir "%INSTALL_DIR%" 2>nul
-    copy docker-manager.exe "%INSTALL_DIR%\" >nul
+    copy dockpit.exe "%INSTALL_DIR%\" >nul
     
     REM Add to PATH if not already there
     echo %PATH% | find /i "%INSTALL_DIR%" >nul || (
@@ -215,12 +215,12 @@ if %errorLevel% == 0 (
     )
     
     echo Installation completed successfully!
-    echo Run 'docker-manager' from any command prompt
+    echo Run 'dockpit' from any command prompt
 ) else (
     echo Installing for current user...
     set INSTALL_DIR=%LOCALAPPDATA%\Programs\DockerManager
     mkdir "%INSTALL_DIR%" 2>nul
-    copy docker-manager.exe "%INSTALL_DIR%\" >nul
+    copy dockpit.exe "%INSTALL_DIR%\" >nul
     
     REM Add to user PATH
     for /f "tokens=2*" %%a in ('reg query HKCU\Environment /v PATH 2^>nul') do set USER_PATH=%%b
@@ -230,7 +230,7 @@ if %errorLevel% == 0 (
     )
     
     echo Installation completed successfully!
-    echo Restart your command prompt and run 'docker-manager'
+    echo Restart your command prompt and run 'dockpit'
 )
 
 pause
@@ -243,14 +243,14 @@ EOF
         # Create a simple installer that copies the binary
         cat > "$output_dir/install-simple.sh" << EOF
 #!/bin/bash
-# Simple installer for Docker Manager v${VERSION}
+# Simple installer for Dockpit v${VERSION}
 
 set -e
 
-APP_NAME="docker-manager"
+APP_NAME="dockpit"
 INSTALL_DIR="\${1:-/usr/local/bin}"
 
-echo "Installing Docker Manager to \$INSTALL_DIR..."
+echo "Installing Dockpit to \$INSTALL_DIR..."
 
 if [[ \$EUID -ne 0 ]] && [[ "\$INSTALL_DIR" == "/usr/local/bin" ]]; then
     echo "Note: Installing to system directory requires sudo"
@@ -316,13 +316,13 @@ build_all() {
 create_release_archive() {
     print_info "Creating release archive..."
     
-    local archive_name="docker-manager-v${VERSION}-multi-platform"
+    local archive_name="dockpit-v${VERSION}-multi-platform"
     
     # Create main README
     cat > "$DIST_DIR/README.md" << EOF
-# Docker Manager v${VERSION} - Multi-Platform Release
+# Dockpit v${VERSION} - Multi-Platform Release
 
-This package contains Docker Manager binaries for multiple platforms.
+This package contains Dockpit binaries for multiple platforms.
 
 ## Available Platforms
 
@@ -379,7 +379,7 @@ case "${1:-all}" in
         build_target "macos-arm64" "${TARGETS[macos-arm64]}"
         ;;
     "--help"|"-h"|"help")
-        echo "Docker Manager Cross-Platform Builder"
+        echo "Dockpit Cross-Platform Builder"
         echo "Usage: $0 [target]"
         echo ""
         echo "Targets:"

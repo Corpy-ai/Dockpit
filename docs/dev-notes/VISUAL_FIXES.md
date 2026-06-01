@@ -1,4 +1,4 @@
-# Docker Manager v3.0 - Corrección de Residuos Visuales
+# Dockpit v3.0 - Corrección de Residuos Visuales
 
 ## 🐛 Problema Identificado
 
@@ -126,13 +126,13 @@ if app.force_full_redraw {
 
 ### Compilar
 ```bash
-cd docker-manager-rust
+cd dockpit-rust
 cargo build --release
 ```
 
 ### Ejecutar
 ```bash
-./target/release/docker-manager
+./target/release/dockpit
 ```
 
 ### Test de Residuos Visuales

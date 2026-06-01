@@ -1,280 +1,205 @@
-# Docker Manager v3.0 - Rust Edition
+# Dockpit
 
-## 🚀 Sobre el Proyecto
+[English](README.md) · [Español](README.es.md)
 
-Docker Manager v3.0 es una completa reescritura en Rust del gestor de contenedores Docker, eliminando completamente los problemas de renderizado del script Bash v2.2 y ofreciendo un rendimiento excepcional.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange.svg)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg)](#requirements)
 
-### Ventajas sobre la versión Bash
+**A fast, flicker-free terminal UI for managing Docker containers.**
 
-- **Interfaz perfecta**: Sin problemas de renderizado, usando ratatui para TUI nativa
-- **Rendimiento 10x superior**: Compilado a código nativo, sin overhead de interpretación
-- **Manejo asíncrono**: Todas las operaciones son no-bloqueantes
-- **Gestión de memoria eficiente**: Sin fugas de memoria ni buffers limitados
-- **Portabilidad**: Un único ejecutable sin dependencias de sistema
+Dockpit is a single static binary that gives you a live, dual-panel view of your
+containers — stream logs with infinite scroll and search, watch real-time stats,
+and run the full container lifecycle without leaving the terminal. It's built in
+Rust on top of [ratatui](https://github.com/ratatui/ratatui),
+[bollard](https://github.com/fussybeaver/bollard) and Tokio, following the Elm
+architecture (unidirectional `Message → Update → View`) for a UI that never
+flickers and never leaks.
 
-## 📋 Características
-
-### Interfaz TUI Interactiva
-- Panel dual: lista de contenedores + logs/estadísticas
-- Navegación fluida con teclado
-- Actualización en tiempo real sin parpadeos
-- Modo expandido para logs a pantalla completa
-- Indicadores visuales de estado de contenedores
-
-### Operaciones Docker
-- ✅ Listar todos los contenedores
-- ✅ Iniciar/Detener/Reiniciar contenedores
-- ✅ Pausar/Reanudar contenedores
-- ✅ Eliminar contenedores
-- ✅ Ver logs en tiempo real
-- ✅ Monitorear estadísticas (CPU, memoria, red, disco)
-- ✅ Ejecutar comandos dentro de contenedores
-- ✅ Inspeccionar configuración de contenedores
-
-### Funciones Avanzadas
-- 📋 Copiar logs al portapapeles (múltiples opciones)
-- 🔢 Navegación numérica rápida (1-9)
-- 🔍 Scroll en logs con Page Up/Down
-- 💾 Guarda último contenedor seleccionado
-- 🎨 Colores e iconos para mejor visualización
-
-## 🛠️ Instalación
-
-### Opción 1: Usar el ejecutable precompilado
-
-```bash
-# Copiar el ejecutable al sistema
-sudo cp target/release/docker-manager /usr/local/bin/
-sudo chmod +x /usr/local/bin/docker-manager
-
-# Ejecutar
-docker-manager
+```
+┌─ Containers ─────────┐┌─ Logs: api ───────────────[ERROR]─┐
+│ ● api      running   ││ 12:04:01 INFO  server listening   │
+│ ● db       running   ││ 12:04:02 WARN  slow query 812ms   │
+│ ◌ worker   paused    ││ 12:04:03 ERROR connection reset   ▒│
+│ ○ cache    stopped   ││ 12:04:03 INFO  retrying (1/5)     ▒│
+└──────────────────────┘└───────────────────────────────────┘
+  ↑↓ select · L logs · S stats · / search · Tab filter · D ops
 ```
 
-### Opción 2: Compilar desde fuente
+## Features
+
+- **Dual-panel TUI** — container list on the left, logs or stats on the right, updated in real time with zero flicker.
+- **Full lifecycle control** — start, stop, restart, pause, unpause and remove containers from an in-app menu.
+- **Live logs with infinite scroll** — scroll past the visible buffer and older history is fetched on demand, paginated by timestamp.
+- **In-log search** — `/` to search, `n`/`N` to jump between matches, highlighted inline (ASCII case-insensitive).
+- **Log-level filtering** — cycle `All → Error → Warn → Info → Debug → Trace` with `Tab`; scroll, scrollbar and title all respect the filter.
+- **Copy & export** — copy presets or the full log to the clipboard, export to a timestamped file, or print to the terminal for manual selection.
+- **Real-time stats** — CPU %, memory usage/limit, network and block I/O.
+- **Exec & inspect** — run commands inside a container from the CLI.
+- **SSH-friendly clipboard** — uses native tools locally and **OSC 52** over SSH, so copying works even on a remote host with no X11.
+- **CLI mode** — scriptable subcommands (`list`, `start`, `stop`, `restart`, `logs`, `stats`, `exec`) alongside the interactive TUI.
+
+## Installation
+
+### From source (recommended)
+
+Requires a recent stable [Rust toolchain](https://rustup.rs/).
 
 ```bash
-# Instalar Rust si no lo tienes
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Compilar el proyecto
+git clone https://github.com/Corpy-ai/dockpit.git
+cd dockpit
 cargo build --release
-
-# El ejecutable estará en target/release/docker-manager
-./target/release/docker-manager
+./target/release/dockpit
 ```
 
-## 📖 Uso
+### With cargo install
 
-### Modo TUI Interactivo (por defecto)
 ```bash
-docker-manager
+cargo install --git https://github.com/Corpy-ai/dockpit
 ```
 
-### Comandos CLI
+### Prebuilt binary
+
+Download the binary for your platform from the
+[Releases](https://github.com/Corpy-ai/dockpit/releases) page and place it on your `PATH`:
+
 ```bash
-# Listar contenedores
-docker-manager list
-
-# Iniciar un contenedor
-docker-manager start <container_name>
-
-# Detener un contenedor
-docker-manager stop <container_name>
-
-# Reiniciar un contenedor
-docker-manager restart <container_name>
-
-# Ver logs
-docker-manager logs <container_name> --lines 100
-docker-manager logs <container_name> --follow
-
-# Ver estadísticas
-docker-manager stats <container_name>
-
-# Ejecutar comando en contenedor
-docker-manager exec <container_name> ls -la
+sudo install -m 0755 dockpit /usr/local/bin/dockpit
 ```
 
-## ⌨️ Atajos de Teclado (Modo TUI)
+## Usage
 
-### Navegación
-- `↑/↓` o `j/k` - Navegar entre contenedores o scroll en logs
-- `←/→` o `h/l` - Cambiar entre panel de contenedores y logs
-- `1-9` - Saltar directamente al contenedor N
-- `n` - Entrada numérica para saltar a contenedor específico
+### Interactive TUI (default)
 
-### Vistas
-- `L` - Cambiar a vista de Logs
-- `S` - Cambiar a vista de Estadísticas
-- `F` - Alternar modo de logs expandido
-
-### Operaciones
-- `D` - Abrir menú de operaciones Docker
-- `C` - Abrir menú del portapapeles
-- `R` - Reiniciar contenedor seleccionado
-- `Q` - Salir de la aplicación
-
-### Scroll en Logs
-- `Page Up` - Subir 10 líneas
-- `Page Down` - Bajar 10 líneas
-- `Home` - Ir al inicio
-- `End` - Ir al final
-
-## 🔧 Requisitos del Sistema
-
-- Docker instalado y en ejecución
-- Usuario con permisos para Docker (grupo docker)
-- Terminal con soporte para 256 colores
-- Opcional: xclip/xsel para soporte de portapapeles en Linux
-
-## 🐛 Solución de Problemas
-
-### "Failed to connect to Docker daemon"
 ```bash
-# Asegúrate de que Docker está en ejecución
-sudo systemctl start docker
-
-# Añade tu usuario al grupo docker
-sudo usermod -aG docker $USER
-# Luego cierra sesión y vuelve a entrar
+dockpit
 ```
 
-### Problemas con el portapapeles
+### CLI commands
+
 ```bash
-# Instalar herramienta de portapapeles en Linux (sesión gráfica local)
-sudo apt-get install xclip  # Debian/Ubuntu  (o wl-clipboard en Wayland)
-sudo dnf install xclip       # Fedora
+dockpit list [--all]                     # list containers (default: running only)
+dockpit start   <container>              # start a container
+dockpit stop    <container>              # stop a container
+dockpit restart <container>              # restart a container
+dockpit logs    <container> [--lines N] [--follow]
+dockpit stats   [container]              # resource stats
+dockpit exec    <container> <command...> # run a command inside a container
 ```
 
-### 📋 Copiar al portapapeles por SSH
+## Keyboard shortcuts (TUI)
 
-Cuando ejecutás la TUI en una máquina remota vía **SSH**, las herramientas del host
-remoto (`xclip`/`wl-copy`/arboard) **no** pueden llegar al portapapeles de tu máquina
-local. Hay tres caminos, según tu terminal:
+| Keys | Action |
+|------|--------|
+| `↑` / `↓` or `j` / `k` | Move selection / scroll logs |
+| `←` / `→` or `h` | Move focus between the container and log panels |
+| `1`–`9` (type a number) | Jump directly to container N |
+| `L` | Logs view |
+| `S` | Stats view |
+| `F` | Toggle full-screen (expanded) logs |
+| `/` | Search in logs (`Enter` jump, `n`/`N` next/prev, `Esc` cancel) |
+| `Tab` | Cycle log-level filter (All/Error/Warn/Info/Debug/Trace) |
+| `D` | Docker operations menu |
+| `C` | Clipboard menu |
+| `R` | Restart selected container |
+| `PageUp` / `PageDown` | Scroll logs by 10 lines |
+| `Home` / `End` | Jump to start / end of logs |
+| `Q` | Quit |
 
-#### 1. Opción `7` del menú — Print to terminal (funciona en CUALQUIER terminal) ✅
+**Docker operations menu (`D`):** `1` Start · `2` Stop · `3` Restart · `4` Pause · `5` Unpause · `6` Remove · `Esc` close.
 
-La forma **garantizada** de copiar logs (incluso muchas líneas) sobre SSH, sin importar
-el terminal: abrí el menú de portapapeles (`c`) y elegí **`7` (Print to terminal)**. La
-TUI sale temporalmente al scrollback normal del terminal e imprime los logs (respetando
-el filtro de nivel activo). Ahí **seleccionás con el mouse y copiás con `Ctrl+Shift+C`**
-(podés scrollear para abarcar líneas que no entran en una pantalla). `Enter` vuelve a la
-TUI. Asegurate de tener el scrollback del terminal en un tamaño suficiente (idealmente
-"ilimitado").
+**Clipboard menu (`C`):** `1` Last 100 lines · `2` Last 500 lines · `3` Visible lines · `4` From current position to end · `5` All logs · `6` Export to file · `7` Print to terminal · `Esc` close.
 
-#### 2. Selección nativa con el mouse (lo visible)
+## Copying logs over SSH
 
-La TUI **no captura el mouse**, así que en cualquier momento podés seleccionar el texto
-visible de los logs con el mouse y copiar con **`Ctrl+Shift+C`**. Para una selección más
-limpia (sin bordes del panel) usá la vista de logs expandida (tecla `F`). Limitación:
-solo copia lo que está en pantalla.
+When you run Dockpit on a remote host over SSH, the remote machine's clipboard
+tools (`xclip`/`wl-copy`) can't reach *your* clipboard. There are three options:
 
-#### 3. OSC 52 (terminales compatibles)
+1. **Print to terminal — option `7` (works in any terminal).** The TUI drops back
+   to the normal scrollback and prints the logs (respecting the active level
+   filter). Select with the mouse and copy with `Ctrl+Shift+C`; `Enter` returns to
+   the TUI. The most reliable option for large volumes.
+2. **Native mouse selection.** Dockpit never captures the mouse, so you can always
+   select the visible logs and copy with `Ctrl+Shift+C`. Use expanded logs (`F`)
+   for a cleaner selection. Limited to what's on screen.
+3. **OSC 52 — clipboard menu options `1`–`6`.** These emit an OSC 52 escape
+   sequence that the *local* terminal intercepts and writes to your clipboard,
+   straight through SSH. Auto-selected over SSH; force it with
+   `DOCKPIT_CLIPBOARD=osc52` (or `=local` for the native backend).
 
-Las opciones **1–6** del menú emiten **OSC 52**, una secuencia de escape que el terminal
-local intercepta y vuelca a tu portapapeles atravesando SSH. Se usa automáticamente sobre
-SSH (forzable con `DOCKER_MANAGER_CLIPBOARD=osc52|local`).
+> ⚠️ **GNOME Terminal / VTE does not support OSC 52** (Tilix, xfce4-terminal,
+> Ptyxis and Black Box are VTE too). Use option `7` or native selection there.
+> OSC 52 works in kitty, alacritty, wezterm, foot, ghostty, iTerm2 and Konsole
+> (with "allow programs to write to the clipboard" enabled). tmux/screen
+> passthrough is wrapped automatically (tmux needs `allow-passthrough on`,
+> default since 3.3). Practical OSC 52 limit is ~100 KB — for more, use option
+> `7` or **Export** (`6`).
 
-> ⚠️ **GNOME Terminal / VTE NO soporta OSC 52** (Tilix, xfce4-terminal, Ptyxis y Black Box
-> también son VTE → tampoco). Es una limitación upstream de larga data:
-> https://gitlab.gnome.org/GNOME/vte/-/issues/2495 — si usás GNOME Terminal, usá la
-> **opción 7** o la selección nativa.
+Verify your terminal:
 
-OSC 52 **sí** funciona en: **kitty, alacritty, wezterm, foot** (Wayland), **ghostty,
-iTerm2** y **Konsole** (con "permitir que los programas escriban al portapapeles"). Para
-verificar tu terminal:
 ```bash
 printf '\033]52;c;%s\007' "$(printf 'osc52-works' | base64 -w0)"
-# Pegá (Ctrl+V): si aparece "osc52-works", tu terminal soporta OSC 52.
-```
-tmux/screen: la secuencia se envuelve automáticamente en el passthrough (tmux requiere
-`allow-passthrough on`, default en ≥ 3.3). Límite práctico ~100 KB; para volúmenes
-mayores usá la opción **7** o **Export** (6).
-
-## 🏗️ Arquitectura
-
-```
-docker-manager-rust/
-├── src/
-│   ├── main.rs           # Punto de entrada y CLI
-│   ├── docker/
-│   │   └── mod.rs        # Cliente Docker API (bollard)
-│   ├── ui/
-│   │   ├── mod.rs        # Sistema de UI principal
-│   │   └── app.rs        # Estado y lógica de la aplicación
-│   ├── utils/
-│   │   └── clipboard.rs  # Gestión del portapapeles
-│   └── config/
-│       └── mod.rs        # Configuración persistente
-├── Cargo.toml            # Dependencias y metadatos
-└── README.md             # Esta documentación
+# Paste (Ctrl+V): if "osc52-works" appears, your terminal supports OSC 52.
 ```
 
-## 🚀 Rendimiento
+## Requirements
 
-### Comparación con v2.2 (Bash)
+- **Docker** running and reachable (the user must be in the `docker` group or use `sudo`).
+- A terminal with 256-color support.
+- Optional: `xclip`/`xsel` (X11) or `wl-clipboard` (Wayland) for the native clipboard backend on Linux. macOS uses `pbcopy` out of the box.
 
-| Métrica | Bash v2.2 | Rust v3.0 | Mejora |
-|---------|-----------|-----------|---------|
-| Tiempo de inicio | ~500ms | ~50ms | 10x |
-| Uso de CPU (idle) | 5-10% | <1% | 10x |
-| Uso de memoria | ~50MB | ~10MB | 5x |
-| Actualización UI | 500ms | 50ms | 10x |
-| Manejo de logs | 1000 líneas | Ilimitado | ∞ |
+## Architecture
 
-### ⚡ Optimizaciones v3.0.0 (2025-01-22)
+```
+src/
+├── main.rs              # CLI parsing (clap) + entry point
+├── app/                 # Elm architecture
+│   ├── message.rs       # Message enum, LogEntry/LogLevel, log parsing
+│   ├── state.rs         # AppState and all view/navigation/menu state
+│   ├── update.rs        # update(): Message → State → Effects (pure)
+│   └── effects.rs       # EffectRunner: runs side effects (Docker, clipboard)
+├── docker/mod.rs        # Docker API client (bollard): list/start/stop/logs/stats/exec
+├── ui/
+│   ├── mod.rs           # Event loop, terminal setup, clipboard backend detection
+│   └── view.rs          # ratatui rendering (panels, menus, highlighting, scrollbar)
+└── utils/
+    ├── clipboard.rs     # Multi-platform clipboard (wl-copy/xclip/xsel/pbcopy/arboard)
+    └── osc52.rs         # OSC 52 clipboard over SSH
+```
 
-**Problemas resueltos**:
-- ✅ **Memory leak eliminado**: Tasks de logs/stats con lifecycle management explícito
-- ✅ **Batch processing**: Máximo 50 logs por ciclo para evitar lag en UI
-- ✅ **Refresh adaptativo**: 250ms (activo) → 500ms (running) → 1000ms (stopped)
-- ✅ **Debouncing**: Renders solo cuando hay cambios reales (60 FPS máximo)
-- ✅ **Cleanup garantizado**: Abort automático de tasks al cambiar contenedor
+State is immutable; every change flows through the pure `update()` function,
+which returns the next state plus a list of `Effect`s. The `EffectRunner`
+executes those effects on Tokio tasks (Docker API calls, log/stat streams,
+clipboard) and feeds results back as `Message`s. All I/O is asynchronous and
+non-blocking, and the UI only redraws when something actually changes.
 
-**Mejoras de performance**:
-- CPU usage reducido en **60%**
-- Memoria estable sin crecimiento progresivo (**40%** menos)
-- Zero visual glitches después de uso prolongado
-- Responsive hasta con logs de alta frecuencia
+Developer notes about specific fixes and optimizations live in
+[`docs/dev-notes/`](docs/dev-notes/).
 
-Ver [OPTIMIZATIONS.md](./OPTIMIZATIONS.md) para detalles técnicos completos.
+## Troubleshooting
 
-### 🎨 Correcciones Visuales v3.0.1 (2025-01-22)
+**"Failed to connect to Docker daemon"**
 
-**Problema resuelto**: Residuos visuales al cambiar entre contenedores o vistas
+```bash
+sudo systemctl start docker          # make sure the daemon is running
+sudo usermod -aG docker "$USER"      # then log out and back in
+```
 
-**Solución implementada**:
-- ✅ **Clear screen garantizado**: Limpieza completa del terminal buffer en cada transición
-- ✅ **Loading screens**: Feedback visual durante cambios de estado (100ms)
-- ✅ **Transiciones profesionales**: Sistema de estados explícito para cambios
-- ✅ **Force redraw**: Override de debouncing en transiciones críticas
+**Clipboard doesn't work locally**
 
-**Experiencia de usuario mejorada**:
-- Pantallas de loading contextuales ("Switching container...", "Loading logs...")
-- Zero residuos visuales al navegar entre contenedores
-- Transiciones limpias entre Logs ↔ Stats
-- Cambios fluidos al modo expandido
+```bash
+sudo apt-get install xclip           # Debian/Ubuntu (or wl-clipboard on Wayland)
+sudo dnf install xclip               # Fedora
+```
 
-Ver [VISUAL_FIXES.md](./VISUAL_FIXES.md) para detalles técnicos completos.
+For SSH, see [Copying logs over SSH](#copying-logs-over-ssh).
 
-## 📝 Licencia
+## Contributing
 
-MIT - Libre para uso comercial y personal
+Contributions are welcome. Open an issue to discuss a change, or send a pull
+request: fork the repo, create a feature branch, commit your changes, and open a
+PR against `main`.
 
-## 🤝 Contribuciones
+## License
 
-Las contribuciones son bienvenidas. Por favor:
-1. Fork el proyecto
-2. Crea una rama para tu feature
-3. Commit tus cambios
-4. Push a la rama
-5. Abre un Pull Request
-
-## 📬 Soporte
-
-Para reportar bugs o solicitar features, abre un issue en el repositorio.
-
----
-
-**Docker Manager v3.0** - Gestión de contenedores Docker rápida, eficiente y sin problemas visuales.
+[MIT](LICENSE) © Corpy

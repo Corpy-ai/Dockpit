@@ -166,7 +166,7 @@ RESULTADO: Zero ghost characters
 
 ### Test 1: Cambios Rápidos de Vista
 ```bash
-Ejecutar: ./target/release/docker-manager
+Ejecutar: ./target/release/dockpit
 Secuencia: L → S → L → S → L (rápido)
 
 ANTES (v3.0.2):
@@ -183,7 +183,7 @@ AHORA (v3.0.3):
 ### Test 2: En Tmux
 ```bash
 Ejecutar: tmux
-         ./target/release/docker-manager
+         ./target/release/dockpit
 Secuencia: L → S → L → F → F → S
 
 ANTES (v3.0.2):
